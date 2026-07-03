@@ -1,0 +1,17 @@
+<Window x:Class="PanguBridge.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:PanguBridge.Views"
+        mc:Ignorable="d"
+        Title="Pangu Bridge" Height="800" Width="720"
+        Closing="MainWindow_OnClosing">
+    <TabControl x:Name="MainTabs">
+        <TabItem Header="Status" />
+        <TabItem Header="Options" />
+        <TabItem Header="Input Test" />
+        <TabItem Header="HIDMaestro" />
+        <TabItem Header="vJoy (Legacy)" />
+    </TabControl>
+</Window>

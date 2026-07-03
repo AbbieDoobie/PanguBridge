@@ -1,0 +1,275 @@
+<UserControl x:Class="PanguBridge.Views.SettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             mc:Ignorable="d">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <StackPanel Margin="16">
+        <TextBlock Text="Options" FontSize="18" FontWeight="Bold" Margin="0,0,0,12" />
+
+        <!-- Appearance -->
+        <TextBlock Text="Appearance" FontWeight="SemiBold" Margin="0,0,0,4" />
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+            <RadioButton x:Name="DarkThemeRadio" Content="Dark" GroupName="Theme" Margin="0,0,16,0"
+                         Checked="ThemeRadio_OnChanged" />
+            <RadioButton x:Name="LightThemeRadio" Content="Light" GroupName="Theme"
+                         Checked="ThemeRadio_OnChanged" />
+        </StackPanel>
+
+        <Separator Margin="0,0,0,12" />
+
+        <!-- General -->
+        <TextBlock Text="General" FontWeight="SemiBold" Margin="0,0,0,4" />
+        <CheckBox x:Name="AutostartCheckBox" Content="Start Pangu Bridge when I log in" Margin="0,0,0,16"
+                  Checked="AutostartCheckBox_OnChanged" Unchecked="AutostartCheckBox_OnChanged" />
+
+        <Separator Margin="0,0,0,12" />
+
+        <!-- Virtual Controller Backend -->
+        <TextBlock Text="Virtual Controller Backend" FontWeight="SemiBold" Margin="0,0,0,4" />
+        <RadioButton x:Name="HidMaestroRadio" GroupName="Backend" Margin="0,0,0,4"
+                     Content="HIDMaestro (recommended) - DualSense Edge identity with full rumble support"
+                     Checked="BackendRadio_OnChanged" />
+        <RadioButton x:Name="VJoyRadio" GroupName="Backend" Margin="0,0,0,4"
+                     Content="vJoy - requires separate vJoy install, does not support rumble"
+                     Checked="BackendRadio_OnChanged" />
+        <TextBox Style="{StaticResource SelectableText}" Margin="0,0,0,16"
+                 Foreground="{DynamicResource SubtleForeground}" FontStyle="Italic"
+                 Text="Backend change takes effect the next time you press Start." />
+
+        <Separator Margin="0,0,0,12" />
+
+        <!-- Rumble Type -->
+        <TextBlock Text="Rumble Type" FontWeight="SemiBold" Margin="0,0,0,4" />
+        <RadioButton x:Name="GripOnlyRadio" GroupName="RumbleMode" Margin="0,0,0,4"
+                     Content="Grip Only - only the grip motors rumble"
+                     Checked="RumbleModeRadio_OnChanged" />
+        <RadioButton x:Name="TriggerOnlyRadio" GroupName="RumbleMode" Margin="0,0,0,4"
+                     Content="Trigger Only - only the trigger motors rumble"
+                     Checked="RumbleModeRadio_OnChanged" />
+        <RadioButton x:Name="GripAndTriggerRadio" GroupName="RumbleMode" Margin="0,0,0,4"
+                     Content="Grip and Trigger - both rumble together"
+                     Checked="RumbleModeRadio_OnChanged" />
+        <RadioButton x:Name="GripAndTriggerIfPulledRadio" GroupName="RumbleMode" Margin="0,0,0,4"
+                     Content="Grip and Trigger if Pulled - grip always rumbles; each trigger motor also rumbles while its trigger is pulled"
+                     Checked="RumbleModeRadio_OnChanged" />
+        <RadioButton x:Name="GripOrTriggerIfPulledRadio" GroupName="RumbleMode" Margin="0,0,0,16"
+                     Content="Grip or Trigger if Pulled - grip rumbles, but pulling either trigger takes over that side's rumble"
+                     Checked="RumbleModeRadio_OnChanged" />
+
+        <Separator Margin="0,0,0,12" />
+
+        <!-- Rumble Intensity -->
+        <TextBlock Text="Rumble Max Intensity" FontWeight="SemiBold" Margin="0,0,0,4" />
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+            <TextBlock Text="Left Grip" Width="110" VerticalAlignment="Center" />
+            <Slider x:Name="GripLeftSlider" Width="250" Minimum="0" Maximum="100"
+                    ValueChanged="GripLeftSlider_OnValueChanged" />
+            <TextBlock x:Name="GripLeftValueText" Width="30" Margin="8,0,0,0" VerticalAlignment="Center" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+            <TextBlock Text="Right Grip" Width="110" VerticalAlignment="Center" />
+            <Slider x:Name="GripRightSlider" Width="250" Minimum="0" Maximum="100"
+                    ValueChanged="GripRightSlider_OnValueChanged" />
+            <TextBlock x:Name="GripRightValueText" Width="30" Margin="8,0,0,0" VerticalAlignment="Center" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+            <TextBlock Text="Left Trigger" Width="110" VerticalAlignment="Center" />
+            <Slider x:Name="TriggerLeftSlider" Width="250" Minimum="0" Maximum="4"
+                    TickFrequency="1" IsSnapToTickEnabled="True" TickPlacement="BottomRight"
+                    ValueChanged="TriggerLeftSlider_OnValueChanged" />
+            <TextBlock x:Name="TriggerLeftValueText" Width="30" Margin="8,0,0,0" VerticalAlignment="Center" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+            <TextBlock Text="Right Trigger" Width="110" VerticalAlignment="Center" />
+            <Slider x:Name="TriggerRightSlider" Width="250" Minimum="0" Maximum="4"
+                    TickFrequency="1" IsSnapToTickEnabled="True" TickPlacement="BottomRight"
+                    ValueChanged="TriggerRightSlider_OnValueChanged" />
+            <TextBlock x:Name="TriggerRightValueText" Width="30" Margin="8,0,0,0" VerticalAlignment="Center" />
+        </StackPanel>
+
+        <Separator Margin="0,0,0,12" />
+
+        <!-- Rumble - Audio Auto Haptics -->
+        <TextBlock Text="Rumble - Audio Auto Haptics" FontWeight="SemiBold" Margin="0,0,0,4" />
+        <CheckBox x:Name="AudioAutoHapticsEnabledCheckBox"
+                  Content="Enable Audio Auto Haptics"
+                  Margin="0,0,0,4"
+                  Checked="AudioAutoHapticsEnabledCheckBox_OnChanged"
+                  Unchecked="AudioAutoHapticsEnabledCheckBox_OnChanged" />
+        <TextBox Style="{StaticResource SelectableText}" Margin="0,0,0,8"
+                 Foreground="{DynamicResource SubtleForeground}" FontStyle="Italic"
+                 TextWrapping="Wrap"
+                 Text="Effect is only applied to motors that are active based on Rumble Type setting above - it can't turn on a motor that Rumble Type excludes." />
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+            <TextBlock Text="Audio Device" Width="110" VerticalAlignment="Center" />
+            <ComboBox x:Name="AudioDeviceComboBox" Width="250" DisplayMemberPath="Name"
+                      SelectionChanged="AudioDeviceComboBox_OnSelectionChanged" />
+            <Button x:Name="RefreshAudioDevicesButton" Width="28" Height="24" Margin="6,0,0,0"
+                    Padding="0" Click="RefreshAudioDevicesButton_OnClick"
+                    ToolTip="Refresh device list">
+                <Grid Width="16" Height="16">
+                    <Path Data="M9.88,2.83 A5.5,5.5 0 1 1 4.46,3.79"
+                          Stroke="{DynamicResource Foreground}" StrokeThickness="1.4"
+                          StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                    <Path Data="M6.76,1.86 L5.52,5.51 L2.94,2.45 Z" Fill="{DynamicResource Foreground}" />
+                </Grid>
+            </Button>
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+            <TextBlock Text="Grip Motors" Width="160" VerticalAlignment="Center" />
+            <ComboBox x:Name="AudioGripModeComboBox" Width="220"
+                      SelectionChanged="AudioGripModeComboBox_OnSelectionChanged" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+            <TextBlock Text="Trigger Motors (Pulled)" Width="160" VerticalAlignment="Center" />
+            <ComboBox x:Name="AudioTriggerPulledModeComboBox" Width="220"
+                      SelectionChanged="AudioTriggerPulledModeComboBox_OnSelectionChanged" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+            <TextBlock Text="Trigger Motors (Idle)" Width="160" VerticalAlignment="Center" />
+            <ComboBox x:Name="AudioTriggerIdleModeComboBox" Width="220"
+                      SelectionChanged="AudioTriggerIdleModeComboBox_OnSelectionChanged" />
+        </StackPanel>
+        <TextBox Style="{StaticResource SelectableText}" Margin="0,0,0,8"
+                 Foreground="{DynamicResource SubtleForeground}" FontStyle="Italic"
+                 TextWrapping="Wrap"
+                 Text="Trigger Motors can use a different mode depending on whether that side's trigger is currently pulled (greater than 0) or idle." />
+
+        <Expander Header="Noise Floor" Margin="0,4,0,8">
+            <StackPanel Margin="16,8,0,0">
+                <TextBlock Text="Grip Noise Floor" Margin="0,0,0,2" />
+                <TextBox Style="{StaticResource SelectableText}" Margin="0,0,0,2"
+                         Foreground="{DynamicResource SubtleForeground}" FontStyle="Italic" TextWrapping="Wrap"
+                         Text="Quiet moments below this percentage of max produce no grip rumble at all, instead of a faint constant buzz. Default: 10%." />
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                    <Slider x:Name="AudioGripNoiseFloorSlider" Width="250" Minimum="0" Maximum="100"
+                            ValueChanged="AudioGripNoiseFloorSlider_OnValueChanged" />
+                    <TextBlock x:Name="AudioGripNoiseFloorValueText" Width="70" Margin="8,0,0,0" VerticalAlignment="Center" />
+                </StackPanel>
+
+                <TextBlock Text="Trigger Noise Floor (Pulled)" Margin="0,0,0,2" />
+                <TextBox Style="{StaticResource SelectableText}" Margin="0,0,0,2"
+                         Foreground="{DynamicResource SubtleForeground}" FontStyle="Italic" TextWrapping="Wrap"
+                         Text="Same idea, applied to trigger motors while that side's trigger is pulled. Default: 2%." />
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                    <Slider x:Name="AudioTriggerPulledNoiseFloorSlider" Width="250" Minimum="0" Maximum="100"
+                            ValueChanged="AudioTriggerPulledNoiseFloorSlider_OnValueChanged" />
+                    <TextBlock x:Name="AudioTriggerPulledNoiseFloorValueText" Width="70" Margin="8,0,0,0" VerticalAlignment="Center" />
+                </StackPanel>
+
+                <TextBlock Text="Trigger Noise Floor (Idle)" Margin="0,0,0,2" />
+                <TextBox Style="{StaticResource SelectableText}" Margin="0,0,0,2"
+                         Foreground="{DynamicResource SubtleForeground}" FontStyle="Italic" TextWrapping="Wrap"
+                         Text="Same idea, applied to trigger motors while that side's trigger is idle. Default: 5%." />
+                <StackPanel Orientation="Horizontal">
+                    <Slider x:Name="AudioTriggerIdleNoiseFloorSlider" Width="250" Minimum="0" Maximum="100"
+                            ValueChanged="AudioTriggerIdleNoiseFloorSlider_OnValueChanged" />
+                    <TextBlock x:Name="AudioTriggerIdleNoiseFloorValueText" Width="70" Margin="8,0,0,0" VerticalAlignment="Center" />
+                </StackPanel>
+            </StackPanel>
+        </Expander>
+
+        <Expander Header="Advanced" Margin="0,0,0,16">
+            <StackPanel Margin="16,8,0,0">
+                <TextBlock Text="Bass Cutoff Frequency" Margin="0,0,0,2" />
+                <TextBox Style="{StaticResource SelectableText}" Margin="0,0,0,2"
+                         Foreground="{DynamicResource SubtleForeground}" FontStyle="Italic" TextWrapping="Wrap"
+                         Text="Only sound below this frequency drives vibration - lower isolates deep rumble, higher lets more midrange thump through. Default: 160 Hz." />
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                    <Slider x:Name="AudioCutoffSlider" Width="250" Minimum="60" Maximum="400"
+                            ValueChanged="AudioCutoffSlider_OnValueChanged" />
+                    <TextBlock x:Name="AudioCutoffValueText" Width="70" Margin="8,0,0,0" VerticalAlignment="Center" />
+                </StackPanel>
+
+                <CheckBox x:Name="AudioIncludeLfeCheckBox"
+                          Content="Include Subwoofer (LFE) Channel"
+                          Margin="0,0,0,2"
+                          Checked="AudioIncludeLfeCheckBox_OnChanged"
+                          Unchecked="AudioIncludeLfeCheckBox_OnChanged" />
+                <TextBox Style="{StaticResource SelectableText}" Margin="0,0,0,8"
+                         Foreground="{DynamicResource SubtleForeground}" FontStyle="Italic" TextWrapping="Wrap"
+                         Text="If your system has a subwoofer/LFE channel configured in Windows, folds it into the vibration signal alongside every other channel. Turn off to ignore it and use only the other channels. Default: on." />
+
+                <TextBlock Text="Attack Time" Margin="0,0,0,2" />
+                <TextBox Style="{StaticResource SelectableText}" Margin="0,0,0,2"
+                         Foreground="{DynamicResource SubtleForeground}" FontStyle="Italic" TextWrapping="Wrap"
+                         Text="How fast vibration ramps up when a sudden sound hits - lower feels snappier. Default: 1.0 ms." />
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                    <Slider x:Name="AudioAttackSlider" Width="250" Minimum="0.5" Maximum="10"
+                            ValueChanged="AudioAttackSlider_OnValueChanged" />
+                    <TextBlock x:Name="AudioAttackValueText" Width="70" Margin="8,0,0,0" VerticalAlignment="Center" />
+                </StackPanel>
+
+                <TextBlock Text="Release Time" Margin="0,0,0,2" />
+                <TextBox Style="{StaticResource SelectableText}" Margin="0,0,0,2"
+                         Foreground="{DynamicResource SubtleForeground}" FontStyle="Italic" TextWrapping="Wrap"
+                         Text="How long vibration takes to fade after a sound ends - higher gives more sustained rumble. Default: 80 ms." />
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                    <Slider x:Name="AudioReleaseSlider" Width="250" Minimum="20" Maximum="300"
+                            ValueChanged="AudioReleaseSlider_OnValueChanged" />
+                    <TextBlock x:Name="AudioReleaseValueText" Width="70" Margin="8,0,0,0" VerticalAlignment="Center" />
+                </StackPanel>
+
+                <TextBlock Text="Intensity Boost" Margin="0,0,0,2" />
+                <TextBox Style="{StaticResource SelectableText}" Margin="0,0,0,2"
+                         Foreground="{DynamicResource SubtleForeground}" FontStyle="Italic" TextWrapping="Wrap"
+                         Text="How strongly loud moments are emphasized over quiet ones. Default: 3.0x." />
+                <StackPanel Orientation="Horizontal">
+                    <Slider x:Name="AudioBoostSlider" Width="250" Minimum="1" Maximum="6"
+                            ValueChanged="AudioBoostSlider_OnValueChanged" />
+                    <TextBlock x:Name="AudioBoostValueText" Width="70" Margin="8,0,0,0" VerticalAlignment="Center" />
+                </StackPanel>
+            </StackPanel>
+        </Expander>
+
+        <Separator Margin="0,0,0,12" />
+
+        <!-- Rumble - Adaptive Trigger -->
+        <TextBlock Text="Rumble - Adaptive Trigger" FontWeight="SemiBold" Margin="0,0,0,4" />
+        <CheckBox x:Name="AdaptiveTriggerSimulationCheckBox"
+                  Content="Simulate Adaptive Triggers with Trigger vibration"
+                  Margin="0,0,0,4"
+                  Checked="AdaptiveTriggerSimulationCheckBox_OnChanged"
+                  Unchecked="AdaptiveTriggerSimulationCheckBox_OnChanged" />
+        <TextBox Style="{StaticResource SelectableText}" Margin="0,0,0,4"
+                 Foreground="{DynamicResource SubtleForeground}" FontStyle="Italic"
+                 TextWrapping="Wrap"
+                 Text="While on, trigger motors ignore Rumble Type and Audio Auto Haptics, only responding to Adaptive Trigger data; grip motors are unaffected." />
+        <CheckBox x:Name="AdaptiveTriggerIgnoreIntensityCheckBox"
+                  Content="Ignore Rumble Intensity Sliders Above"
+                  Margin="0,0,0,4"
+                  Checked="AdaptiveTriggerIgnoreIntensityCheckBox_OnChanged"
+                  Unchecked="AdaptiveTriggerIgnoreIntensityCheckBox_OnChanged" />
+        <CheckBox x:Name="AdaptiveTriggerDisableMatchingGripCheckBox"
+                  Content="Disable Matching Grip Motor During Adaptive Trigger"
+                  Margin="0,0,0,4"
+                  Checked="AdaptiveTriggerDisableMatchingGripCheckBox_OnChanged"
+                  Unchecked="AdaptiveTriggerDisableMatchingGripCheckBox_OnChanged" />
+        <TextBox Style="{StaticResource SelectableText}" Margin="0,0,0,16"
+                 Foreground="{DynamicResource SubtleForeground}" FontStyle="Italic"
+                 TextWrapping="Wrap"
+                 Text="Workaround for an issue where Adaptive Trigger vibration may cut out when the Grip Motor on the same side vibrates." />
+
+        <Separator Margin="0,0,0,12" />
+
+        <!-- Analog Input Adjustments -->
+        <TextBlock Text="Analog Input Adjustments" FontWeight="SemiBold" Margin="0,0,0,4" />
+        <CheckBox x:Name="SwapTriggersCheckBox" Content="Swap Left and Right Triggers" Margin="0,0,0,4"
+                  Checked="SwapTriggersCheckBox_OnChanged" Unchecked="SwapTriggersCheckBox_OnChanged" />
+        <CheckBox x:Name="SwapSticksCheckBox" Content="Swap Left and Right Joysticks" Margin="0,0,0,4"
+                  Checked="SwapSticksCheckBox_OnChanged" Unchecked="SwapSticksCheckBox_OnChanged" />
+        <CheckBox x:Name="InvertLeftStickXCheckBox" Content="Invert Left Joystick X-Axis" Margin="0,0,0,4"
+                  Checked="InvertLeftStickXCheckBox_OnChanged" Unchecked="InvertLeftStickXCheckBox_OnChanged" />
+        <CheckBox x:Name="InvertLeftStickYCheckBox" Content="Invert Left Joystick Y-Axis" Margin="0,0,0,4"
+                  Checked="InvertLeftStickYCheckBox_OnChanged" Unchecked="InvertLeftStickYCheckBox_OnChanged" />
+        <CheckBox x:Name="InvertRightStickXCheckBox" Content="Invert Right Joystick X-Axis" Margin="0,0,0,4"
+                  Checked="InvertRightStickXCheckBox_OnChanged" Unchecked="InvertRightStickXCheckBox_OnChanged" />
+        <CheckBox x:Name="InvertRightStickYCheckBox" Content="Invert Right Joystick Y-Axis" Margin="0,0,0,16"
+                  Checked="InvertRightStickYCheckBox_OnChanged" Unchecked="InvertRightStickYCheckBox_OnChanged" />
+    </StackPanel>
+    </ScrollViewer>
+</UserControl>

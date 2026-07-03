@@ -1,0 +1,36 @@
+<UserControl x:Class="PanguBridge.Views.VJoyLegacyView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             mc:Ignorable="d">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="16">
+            <TextBlock Text="vJoy (Legacy)" FontSize="18" FontWeight="Bold" Margin="0,0,0,4" />
+            <TextBox Style="{StaticResource SelectableText}" Margin="0,0,0,16" IsReadOnly="True"
+                     Foreground="{DynamicResource SubtleForeground}"
+                     Text="Converts your controller inputs into a general DirectInput device. Requires manual configuration in Steam Input, and does not support rumble." />
+
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                <TextBlock Text="vJoy device number:" VerticalAlignment="Center" Margin="0,0,8,0" />
+                <TextBox x:Name="VJoyDeviceIdTextBox" Width="50" LostFocus="VJoyDeviceIdTextBox_OnLostFocus" />
+            </StackPanel>
+
+            <TextBox Style="{StaticResource SelectableText}" Margin="0,0,0,4"
+                     Foreground="{DynamicResource SubtleForeground}"
+                     Text="Must be configured with exactly 19 buttons, the X/Y/Z/Rx/Ry/Rz axes, and 1 continuous POV hat (not 4-direction/discrete). Open vJoyConf and set these manually, or press the button below." />
+            <Button x:Name="ConfigureVJoyButton" Content="Automatically Configure vJoy Device"
+                    HorizontalAlignment="Left" Margin="0,0,0,4" Click="ConfigureVJoyButton_OnClick" />
+            <TextBox x:Name="ConfigureVJoyResultText" Style="{StaticResource SelectableText}"
+                     Margin="0,0,0,4" Visibility="Collapsed" />
+
+            <Separator Margin="0,4,0,0" />
+
+            <ContentControl x:Name="MappingHost" Margin="0,12,0,16" />
+
+            <Separator Margin="0,0,0,16" />
+
+            <ContentControl x:Name="SteamIntegrationHost" />
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

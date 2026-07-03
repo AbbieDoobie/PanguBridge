@@ -1,0 +1,3 @@
+Portable mode is active. All Pangu Bridge data is stored in the "data" folder next to the application binaries.
+
+To switch to AppData mode (%APPDATA%\PanguBridge\), delete this file.

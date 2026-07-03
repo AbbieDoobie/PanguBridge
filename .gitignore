@@ -1,0 +1,24 @@
+# Build output
+bin/
+obj/
+
+# Portable-mode data (settings.json, debug logs) - never ship user data
+data/
+*.log
+
+# Visual Studio / Rider
+.vs/
+.idea/
+*.user
+*.suo
+
+# HidCapture tool output
+tools/HidCapture/bin/
+tools/HidCapture/obj/
+capture_*.log
+
+# Local Claude Code settings (machine-specific permission allowlist)
+.claude/settings.local.json
+
+# Claude Code project instructions - not for the public repo
+CLAUDE.md

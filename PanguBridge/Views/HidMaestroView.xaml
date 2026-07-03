@@ -1,0 +1,107 @@
+<UserControl x:Class="PanguBridge.Views.HidMaestroView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             mc:Ignorable="d">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <StackPanel Margin="16">
+        <TextBlock Text="HIDMaestro" FontSize="18" FontWeight="Bold" Margin="0,0,0,4" />
+        <TextBox Style="{StaticResource SelectableText}" Margin="0,0,0,16" IsReadOnly="True"
+                 Foreground="{DynamicResource SubtleForeground}"
+                 Text="Converts your controller inputs into a virtual DualSense Edge controller. Works with Steam Input out of the box." />
+
+        <Separator Margin="0,0,0,12" />
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+            <Ellipse x:Name="HmDriverDot" Width="10" Height="10" Fill="Gray"
+                     Margin="0,0,8,0" VerticalAlignment="Center" />
+            <TextBox x:Name="HmDriverStatusText" Style="{StaticResource SelectableText}"
+                     Text="Checking..." />
+        </StackPanel>
+
+        <TextBox Style="{StaticResource SelectableText}" Margin="0,0,0,8"
+                 Foreground="{DynamicResource SubtleForeground}"
+                 Text="One-time setup: installs a driver that persists across reboots and updates." />
+
+        <Button x:Name="HmReinstallButton" HorizontalAlignment="Left" Margin="0,0,0,12"
+                Content="Reinstall Drivers" Click="HmReinstallButton_OnClick" />
+
+        <TextBox Style="{StaticResource SelectableText}" Margin="0,0,0,8"
+                 Foreground="{DynamicResource SubtleForeground}"
+                 Text="If you wish to remove HIDMaestro, the driver can be uninstalled." />
+
+        <Button x:Name="HmUninstallButton" HorizontalAlignment="Left" Margin="0,0,0,12"
+                Content="Uninstall Driver" Click="HmUninstallButton_OnClick" />
+
+        <Separator Margin="0,0,0,12" />
+
+        <TextBlock Text="Virtual Controller" FontWeight="SemiBold" Margin="0,0,0,4" />
+        <TextBox Style="{StaticResource SelectableText}" Margin="0,0,0,8" IsReadOnly="True"
+                 Foreground="{DynamicResource SubtleForeground}"
+                 Text="Choose when the virtual DualSense Edge controller is created." />
+        <RadioButton x:Name="HmOnStartRadio" GroupName="HmConnect" Margin="0,0,0,4"
+                     Content="On Program Start"
+                     Checked="HmConnectRadio_OnChanged" />
+        <RadioButton x:Name="HmOnConnectRadio" GroupName="HmConnect" Margin="0,0,0,4"
+                     Content="When Pangu Controller is Connected"
+                     Checked="HmConnectRadio_OnChanged" />
+        <TextBox Style="{StaticResource SelectableText}" Margin="0,0,0,16"
+                 Foreground="{DynamicResource SubtleForeground}"
+                 Text="Delays creating the virtual controller until the Pangu dongle is detected - Steam won't see it until then." />
+
+        <CheckBox x:Name="HmDisconnectOnControllerDisconnectCheckBox"
+                  Content="Disconnect Virtual Controller when Pangu Controller is Disconnected"
+                  Margin="0,0,0,4"
+                  Checked="HmDisconnectOnControllerDisconnectCheckBox_OnChanged"
+                  Unchecked="HmDisconnectOnControllerDisconnectCheckBox_OnChanged" />
+        <TextBox Style="{StaticResource SelectableText}" Margin="0,0,0,16"
+                 Foreground="{DynamicResource SubtleForeground}"
+                 Text="Steam sees the virtual controller disappear and reappear along with the physical one." />
+
+        <TextBlock Text="Submit Rate" FontWeight="SemiBold" Margin="0,0,0,4" />
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+            <TextBlock Text="Rate (Hz)" Width="110" VerticalAlignment="Center" />
+            <Slider x:Name="HmSubmitRateSlider" Width="250" Minimum="250" Maximum="1000"
+                    TickFrequency="250" IsSnapToTickEnabled="True" TickPlacement="BottomRight"
+                    ValueChanged="HmSubmitRateSlider_OnValueChanged" />
+            <TextBlock x:Name="HmSubmitRateValueText" Width="30" Margin="8,0,0,0" VerticalAlignment="Center" />
+        </StackPanel>
+        <TextBox Style="{StaticResource SelectableText}" Margin="0,0,0,16"
+                 Foreground="{DynamicResource SubtleForeground}"
+                 Text="How often (per second) fresh input is sent to the virtual controller - not how often the Pangu dongle itself is polled, so lowering it doesn't affect how quickly button presses are detected, just how often they're delivered. Pangu Bridge is light on CPU already; lowering this trims it further if you'd like. Default: 1000." />
+
+        <Separator Margin="0,0,0,12" />
+
+        <TextBlock Text="Button Mapping" FontWeight="SemiBold" Margin="0,0,0,4" />
+        <TextBox Style="{StaticResource SelectableText}" Margin="0,0,0,8" IsReadOnly="True"
+                 Foreground="{DynamicResource SubtleForeground}"
+                 Text="Choose what each physical button drives on the virtual DualSense Edge controller." />
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+            <Button x:Name="HmSaveMappingsButton" Content="Save and Apply Mappings"
+                    Margin="0,0,8,0" Click="HmSaveMappingsButton_OnClick" />
+            <Button x:Name="HmResetMappingsButton" Content="Reset to Defaults"
+                    Click="HmResetMappingsButton_OnClick" />
+        </StackPanel>
+
+        <DataGrid x:Name="HmMappingGrid" Margin="24,0" AutoGenerateColumns="False"
+                  CanUserAddRows="False" CanUserDeleteRows="False"
+                  CanUserReorderColumns="False" CanUserSortColumns="False">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Physical Button" Binding="{Binding SourceDisplay}"
+                                    IsReadOnly="True" Width="200" />
+                <DataGridTemplateColumn Header="Mapped To" Width="*">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <ComboBox ItemsSource="{Binding OutputChoices}"
+                                      SelectedItem="{Binding SelectedOutputDisplay, Mode=TwoWay}"
+                                      SelectionChanged="MappingComboBox_OnSelectionChanged" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+    </StackPanel>
+    </ScrollViewer>
+</UserControl>

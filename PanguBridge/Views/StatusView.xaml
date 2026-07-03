@@ -1,0 +1,69 @@
+<UserControl x:Class="PanguBridge.Views.StatusView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             mc:Ignorable="d">
+    <Grid>
+    <StackPanel Margin="16">
+        <TextBlock Text="Controller Status" FontSize="18" FontWeight="Bold" Margin="0,0,0,12" />
+
+        <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="4" Padding="12" Margin="0,0,0,8">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <Ellipse x:Name="HidDot" Width="10" Height="10" Fill="Gray" Margin="0,0,8,0" VerticalAlignment="Center" />
+                    <TextBox Style="{StaticResource SelectableText}" FontWeight="SemiBold" IsReadOnly="True"
+                             Text="Pangu Controller" />
+                </StackPanel>
+                <TextBox x:Name="HidStatusText" Style="{StaticResource SelectableText}" Margin="18,4,0,0" Text="Checking..." />
+            </StackPanel>
+        </Border>
+
+        <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="4" Padding="12" Margin="0,0,0,8">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <Ellipse x:Name="BackendDot" Width="10" Height="10" Fill="Gray" Margin="0,0,8,0" VerticalAlignment="Center" />
+                    <TextBox x:Name="BackendTitleText" Style="{StaticResource SelectableText}" FontWeight="SemiBold" IsReadOnly="True"
+                             Text="Virtual controller" />
+                </StackPanel>
+                <TextBox x:Name="BackendStatusText" Style="{StaticResource SelectableText}" Margin="18,4,0,0" Text="Checking..." />
+                <StackPanel Orientation="Horizontal" Margin="18,8,0,0">
+                    <Button x:Name="InstallDriverButton" Content="Install Driver"
+                            Visibility="Collapsed" Margin="0,0,8,0" Click="InstallDriverButton_OnClick" />
+                    <Button x:Name="LocateVJoyButton" Content="Locate vJoy manually..."
+                            Visibility="Collapsed" Click="LocateVJoyButton_OnClick" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="4" Padding="12" Margin="0,0,0,8">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <Ellipse x:Name="FfbDot" Width="10" Height="10" Fill="Gray" Margin="0,0,8,0" VerticalAlignment="Center" />
+                    <TextBox x:Name="FfbTitleText" Style="{StaticResource SelectableText}" FontWeight="SemiBold" IsReadOnly="True"
+                             Text="Rumble" />
+                </StackPanel>
+                <TextBox x:Name="FfbStatusText" Style="{StaticResource SelectableText}" Margin="18,4,0,0" Text="Checking..." />
+            </StackPanel>
+        </Border>
+
+        <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="4" Padding="12" Margin="0,0,0,8">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <Ellipse x:Name="EngineDot" Width="10" Height="10" Fill="Gray" Margin="0,0,8,0" VerticalAlignment="Center" />
+                    <TextBox Style="{StaticResource SelectableText}" FontWeight="SemiBold" IsReadOnly="True"
+                             Text="Pangu Bridge" />
+                </StackPanel>
+                <TextBox x:Name="EngineStatusText" Style="{StaticResource SelectableText}" Margin="18,4,0,0" Text="Checking..." />
+                <StackPanel Orientation="Horizontal" Margin="18,8,0,0">
+                    <Button x:Name="StartButton" Content="Start" Width="80" Click="StartButton_OnClick" Margin="0,0,8,0" />
+                    <Button x:Name="StopButton" Content="Stop" Width="80" Click="StopButton_OnClick" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+    </StackPanel>
+
+    <TextBlock x:Name="VersionText" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+               Margin="0,0,10,6" Foreground="{DynamicResource SubtleForeground}" FontSize="11" />
+    </Grid>
+</UserControl>

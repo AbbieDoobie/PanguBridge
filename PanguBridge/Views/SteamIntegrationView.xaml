@@ -1,0 +1,28 @@
+<UserControl x:Class="PanguBridge.Views.SteamIntegrationView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             mc:Ignorable="d">
+    <StackPanel Margin="16">
+        <TextBlock Text="Steam Input" FontSize="18" FontWeight="Bold" Margin="0,0,0,12" />
+
+        <TextBlock TextWrapping="Wrap" Margin="0,0,0,12">
+            <Run Text="Steam doesn't read a config file for this - paste the mapping below directly into Steam's own controller setup:" />
+        </TextBlock>
+        <StackPanel Margin="8,0,0,12">
+            <TextBlock TextWrapping="Wrap" Margin="0,0,0,4" Text="1. In Steam, go to Settings &gt; Controller &gt; General Controller Settings, and set up this controller as a generic gamepad." />
+            <TextBlock TextWrapping="Wrap" Margin="0,0,0,4" Text="2. Click &quot;Copy to Clipboard&quot; below." />
+            <TextBlock TextWrapping="Wrap" Text="3. During Steam's controller setup, when prompted, click its &quot;Paste from Clipboard&quot; button." />
+        </StackPanel>
+
+        <TextBlock Text="Mapping string:" Margin="0,0,0,4" />
+        <TextBox x:Name="MappingPreviewText" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True"
+                 Height="100" VerticalScrollBarVisibility="Auto" FontFamily="Consolas" />
+
+        <Button x:Name="CopyButton" Content="Copy to Clipboard" Width="160" HorizontalAlignment="Left"
+                Margin="0,12,0,0" Click="CopyButton_OnClick" />
+
+        <TextBox x:Name="ResultText" Style="{StaticResource SelectableText}" Margin="0,12,0,0" />
+    </StackPanel>
+</UserControl>

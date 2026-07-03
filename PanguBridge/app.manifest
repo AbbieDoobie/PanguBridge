@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
+  <assemblyIdentity version="1.0.0.0" name="PanguBridge.app" />
+
+  <!--
+    HIDMaestro requires admin for both InstallDriver() and CreateController() — the latter
+    because hmswd.exe (the transient SwDeviceCreate helper it spawns) inherits the caller's
+    privilege level and fails with Access Denied if that caller is non-elevated.
+
+    One UAC prompt per launch; after that the app runs fully elevated for its session.
+    This is the same model HIDMaestroTest.exe uses ("Requesting elevation (admin required)...").
+  -->
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
+    <security>
+      <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">
+        <requestedExecutionLevel level="requireAdministrator" uiAccess="false" />
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
+
+  <!-- Windows 10/11 compatibility -->
+  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+    <application>
+      <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}" /> <!-- Windows 10/11 -->
+    </application>
+  </compatibility>
+</assembly>
