@@ -20,11 +20,41 @@ public sealed class AudioAutoHapticsCapture : IDisposable, IMMNotificationClient
     /// (Role.Multimedia, selected by null/empty).</summary>
     public const string CommunicationsDeviceSelector = "communications";
 
-    // mmreg.h SPEAKER_LOW_FREQUENCY - the LFE/subwoofer bit in WAVEFORMATEXTENSIBLE's channel
-    // mask. Channels are packed into the interleaved buffer in ascending bit-position order
-    // among the mask's set bits, so the LFE channel's index is the popcount of every set bit
-    // below this one.
-    private const int SpeakerLowFrequency = 0x8;
+    // mmreg.h speaker-position bits for WAVEFORMATEXTENSIBLE's channel mask. Channels are packed
+    // into the interleaved buffer in ascending bit-position order among the mask's set bits, so
+    // a given channel's index is however many set bits precede its own.
+    private const int SpeakerFrontLeft          = 0x1;
+    private const int SpeakerFrontRight         = 0x2;
+    private const int SpeakerFrontCenter        = 0x4;
+    private const int SpeakerLowFrequency       = 0x8;
+    private const int SpeakerBackLeft           = 0x10;
+    private const int SpeakerBackRight          = 0x20;
+    private const int SpeakerFrontLeftOfCenter  = 0x40;
+    private const int SpeakerFrontRightOfCenter = 0x80;
+    private const int SpeakerBackCenter         = 0x100;
+    private const int SpeakerSideLeft           = 0x200;
+    private const int SpeakerSideRight          = 0x400;
+    private const int SpeakerTopCenter          = 0x800;
+    private const int SpeakerTopFrontLeft       = 0x1000;
+    private const int SpeakerTopFrontCenter     = 0x2000;
+    private const int SpeakerTopFrontRight      = 0x4000;
+    private const int SpeakerTopBackLeft        = 0x8000;
+    private const int SpeakerTopBackCenter      = 0x10000;
+    private const int SpeakerTopBackRight       = 0x20000;
+
+    // Every "this speaker lives on the left/right side of the room" bit, regardless of whether
+    // it's a front, rear, side, or height position - each one folds into that side's motor
+    // chain, not just the front pair. Center-ish positions (front/back/top center) are their own
+    // bucket, folded equally into both sides when IncludeCenter is on.
+    private const int LeftSpeakerMask =
+        SpeakerFrontLeft | SpeakerBackLeft | SpeakerFrontLeftOfCenter | SpeakerSideLeft |
+        SpeakerTopFrontLeft | SpeakerTopBackLeft;
+    private const int RightSpeakerMask =
+        SpeakerFrontRight | SpeakerBackRight | SpeakerFrontRightOfCenter | SpeakerSideRight |
+        SpeakerTopFrontRight | SpeakerTopBackRight;
+    private const int CenterSpeakerMask =
+        SpeakerFrontCenter | SpeakerBackCenter | SpeakerTopCenter | SpeakerTopFrontCenter |
+        SpeakerTopBackCenter;
 
     private readonly MMDeviceEnumerator _enumerator = new();
     private WasapiLoopbackCapture? _capture;
@@ -48,6 +78,11 @@ public sealed class AudioAutoHapticsCapture : IDisposable, IMMNotificationClient
     /// one - is folded into both Left/Right chains. When false, LFE is ignored entirely even
     /// if present, using only the front left/right channels.</summary>
     public bool IncludeLfe { get; set; } = true;
+
+    /// <summary>When true (default), a dedicated center channel - if the capture format
+    /// declares one - is folded into both Left/Right chains. When false, the center channel is
+    /// ignored entirely even if present, using only the other channels.</summary>
+    public bool IncludeCenter { get; set; } = true;
 
     // Per-channel low-pass/envelope-follower memory, carried across DataAvailable calls and
     // reset whenever capture (re)starts against a new device/format.
@@ -171,9 +206,14 @@ public sealed class AudioAutoHapticsCapture : IDisposable, IMMNotificationClient
     }
 
     // WASAPI shared-mode loopback always delivers the endpoint's own mix format - commonly
-    // 32-bit IEEE float, 2+ channels. LFE (if present) gets folded into both L/R chains equally
-    // rather than kept separate, since bass frequencies aren't meaningfully directional (the
-    // same reason a subwoofer can sit anywhere in a room without affecting stereo image).
+    // 32-bit IEEE float, 2+ channels. Every channel the format's speaker mask designates as a
+    // left-side position (front, back, side, height - doesn't matter which) folds into the Left
+    // chain, and the mirrored right-side positions fold into Right, so the physical left
+    // trigger/grip motor buzzes from left-side audio content and the right motor from
+    // right-side content even on 5.1/7.1. Center/LFE (if present) fold into both chains equally
+    // instead, since neither is meaningfully directional. A channel the mask doesn't recognize,
+    // or a format with no mask at all beyond 2 channels, falls back to folding into both chains
+    // equally rather than being silently dropped.
     private void OnDataAvailable(object? sender, WaveInEventArgs e)
     {
         if (sender is not WasapiCapture capture) return;
@@ -182,13 +222,16 @@ public sealed class AudioAutoHapticsCapture : IDisposable, IMMNotificationClient
         int channels = format.Channels;
         if (channels < 1 || format.BitsPerSample != 32) return; // only IEEE float mix formats are handled
 
-        int lfeIndex = -1;
-        if (IncludeLfe && format is WaveFormatExtensible && channels > 2)
-        {
-            int channelMask = GetChannelMask(format);
-            if ((channelMask & SpeakerLowFrequency) != 0)
-                lfeIndex = System.Numerics.BitOperations.PopCount((uint)(channelMask & (SpeakerLowFrequency - 1)));
-        }
+        // Classified once per buffer (not per frame) into which motor chain(s) each channel
+        // index feeds - see ClassifyChannels below. Backing storage is stackalloc'd here (not
+        // inside ClassifyChannels) since a Span's stackalloc'd memory can't escape the method
+        // that allocated it - passing the spans in by value and filling them works fine.
+        Span<int> leftIdx = stackalloc int[channels];
+        Span<int> rightIdx = stackalloc int[channels];
+        Span<int> centerIdx = stackalloc int[channels];
+        Span<int> otherIdx = stackalloc int[channels];
+        ClassifyChannels(format, channels, leftIdx, out int leftCount, rightIdx, out int rightCount,
+            centerIdx, out int centerCount, otherIdx, out int otherCount, out int lfeIndex);
 
         int frameSize = 4 * channels;
         int frames = e.BytesRecorded / frameSize;
@@ -207,24 +250,20 @@ public sealed class AudioAutoHapticsCapture : IDisposable, IMMNotificationClient
         for (int i = 0; i < frames; i++)
         {
             int baseIdx = i * channels;
-            float left  = samples[baseIdx];
-            float right = channels > 1 ? samples[baseIdx + 1] : left;
-            float lfe   = lfeIndex >= 0 ? samples[baseIdx + lfeIndex] : 0f;
 
-            // Every channel beyond the front pair (center, rear/side, height, etc. on 5.1/7.1
-            // setups) folds equally into both chains - there's no reliable way to map an
-            // arbitrary surround channel to a single physical motor, so content that only lives
-            // on e.g. a rear channel isn't silently dropped just because it isn't part of the
-            // front stereo pair.
-            float other = 0f;
-            for (int ch = 2; ch < channels; ch++)
-            {
-                if (ch == lfeIndex) continue;
-                other += samples[baseIdx + ch];
-            }
+            float leftSum = 0f;
+            for (int k = 0; k < leftCount; k++) leftSum += samples[baseIdx + leftIdx[k]];
+            float rightSum = 0f;
+            for (int k = 0; k < rightCount; k++) rightSum += samples[baseIdx + rightIdx[k]];
+            float otherSum = 0f;
+            for (int k = 0; k < otherCount; k++) otherSum += samples[baseIdx + otherIdx[k]];
 
-            lpL += lpA * (left + other + lfe - lpL);
-            lpR += lpA * (right + other + lfe - lpR);
+            float center = 0f;
+            if (IncludeCenter) for (int k = 0; k < centerCount; k++) center += samples[baseIdx + centerIdx[k]];
+            float lfe = IncludeLfe && lfeIndex >= 0 ? samples[baseIdx + lfeIndex] : 0f;
+
+            lpL += lpA * (leftSum + otherSum + lfe + center - lpL);
+            lpR += lpA * (rightSum + otherSum + lfe + center - lpR);
 
             float absL = MathF.Abs(lpL);
             float absR = MathF.Abs(lpR);
@@ -261,6 +300,52 @@ public sealed class AudioAutoHapticsCapture : IDisposable, IMMNotificationClient
         IntPtr ptr = WaveFormat.MarshalToPtr(format);
         try { return Marshal.ReadInt32(ptr, 20); }
         finally { Marshal.FreeHGlobal(ptr); }
+    }
+
+    // Sorts every channel index into which motor chain(s) it should feed. Without a channel mask
+    // to go by (plain stereo, or an unusual >2 channel format with no mask), falls back to
+    // conventional Left/Right channel order with no Center/LFE/other distinction. With a mask,
+    // walks its bits in ascending order (a channel's index is simply how many set bits precede
+    // its own) and buckets each one by LeftSpeakerMask/RightSpeakerMask/CenterSpeakerMask/LFE -
+    // anything else lands in "other", folded into both chains the same as Center/LFE.
+    private static void ClassifyChannels(WaveFormat format, int channels,
+        Span<int> leftIdx, out int leftCount,
+        Span<int> rightIdx, out int rightCount,
+        Span<int> centerIdx, out int centerCount,
+        Span<int> otherIdx, out int otherCount,
+        out int lfeIndex)
+    {
+        leftCount = rightCount = centerCount = otherCount = 0;
+        lfeIndex = -1;
+
+        if (channels <= 2 || format is not WaveFormatExtensible)
+        {
+            leftIdx[leftCount++] = 0;
+            if (channels > 1) rightIdx[rightCount++] = 1;
+            for (int ch = 2; ch < channels; ch++) otherIdx[otherCount++] = ch;
+            return;
+        }
+
+        int channelMask = GetChannelMask(format);
+        int idx = 0;
+        for (int bit = 0; bit < 32 && idx < channels; bit++)
+        {
+            int bitValue = 1 << bit;
+            if ((channelMask & bitValue) == 0) continue;
+
+            if (bitValue == SpeakerLowFrequency) lfeIndex = idx;
+            else if ((bitValue & LeftSpeakerMask) != 0) leftIdx[leftCount++] = idx;
+            else if ((bitValue & RightSpeakerMask) != 0) rightIdx[rightCount++] = idx;
+            else if ((bitValue & CenterSpeakerMask) != 0) centerIdx[centerCount++] = idx;
+            else otherIdx[otherCount++] = idx;
+
+            idx++;
+        }
+
+        // The mask had fewer set bits than the format's actual channel count (shouldn't happen
+        // in practice, but don't silently drop trailing channels if it does) - fold them into
+        // both chains equally, same as any other unrecognized channel.
+        for (; idx < channels; idx++) otherIdx[otherCount++] = idx;
     }
 
     // IMMNotificationClient - only default-device-role changes are acted on, so capture keeps

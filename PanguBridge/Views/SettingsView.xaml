@@ -101,7 +101,7 @@
         <TextBox Style="{StaticResource SelectableText}" Margin="0,0,0,8"
                  Foreground="{DynamicResource SubtleForeground}" FontStyle="Italic"
                  TextWrapping="Wrap"
-                 Text="Effect is only applied to motors that are active based on Rumble Type setting above - it can't turn on a motor that Rumble Type excludes." />
+                 Text="Derives rumble from whatever audio is currently playing, using left-side sound for the left motors and right-side sound for the right motors. Effect is only applied to motors that are active based on Rumble Type setting above - it can't turn on a motor that Rumble Type excludes." />
 
         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
             <TextBlock Text="Audio Device" Width="110" VerticalAlignment="Center" />
@@ -144,7 +144,7 @@
                 <TextBlock Text="Grip Noise Floor" Margin="0,0,0,2" />
                 <TextBox Style="{StaticResource SelectableText}" Margin="0,0,0,2"
                          Foreground="{DynamicResource SubtleForeground}" FontStyle="Italic" TextWrapping="Wrap"
-                         Text="Quiet moments below this percentage of max produce no grip rumble at all, instead of a faint constant buzz. Default: 10%." />
+                         Text="Quiet moments below this percentage of max produce no grip rumble at all, instead of a faint constant buzz. Default: 35%." />
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                     <Slider x:Name="AudioGripNoiseFloorSlider" Width="250" Minimum="0" Maximum="100"
                             ValueChanged="AudioGripNoiseFloorSlider_OnValueChanged" />
@@ -154,7 +154,7 @@
                 <TextBlock Text="Trigger Noise Floor (Pulled)" Margin="0,0,0,2" />
                 <TextBox Style="{StaticResource SelectableText}" Margin="0,0,0,2"
                          Foreground="{DynamicResource SubtleForeground}" FontStyle="Italic" TextWrapping="Wrap"
-                         Text="Same idea, applied to trigger motors while that side's trigger is pulled. Default: 2%." />
+                         Text="Same idea, applied to trigger motors while that side's trigger is pulled. Default: 10%." />
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                     <Slider x:Name="AudioTriggerPulledNoiseFloorSlider" Width="250" Minimum="0" Maximum="100"
                             ValueChanged="AudioTriggerPulledNoiseFloorSlider_OnValueChanged" />
@@ -164,7 +164,7 @@
                 <TextBlock Text="Trigger Noise Floor (Idle)" Margin="0,0,0,2" />
                 <TextBox Style="{StaticResource SelectableText}" Margin="0,0,0,2"
                          Foreground="{DynamicResource SubtleForeground}" FontStyle="Italic" TextWrapping="Wrap"
-                         Text="Same idea, applied to trigger motors while that side's trigger is idle. Default: 5%." />
+                         Text="Same idea, applied to trigger motors while that side's trigger is idle. Default: 35%." />
                 <StackPanel Orientation="Horizontal">
                     <Slider x:Name="AudioTriggerIdleNoiseFloorSlider" Width="250" Minimum="0" Maximum="100"
                             ValueChanged="AudioTriggerIdleNoiseFloorSlider_OnValueChanged" />
@@ -175,6 +175,24 @@
 
         <Expander Header="Advanced" Margin="0,0,0,16">
             <StackPanel Margin="16,8,0,0">
+                <CheckBox x:Name="AudioIncludeLfeCheckBox"
+                          Content="Include Subwoofer (LFE) Channel"
+                          Margin="0,0,0,2"
+                          Checked="AudioIncludeLfeCheckBox_OnChanged"
+                          Unchecked="AudioIncludeLfeCheckBox_OnChanged" />
+                <TextBox Style="{StaticResource SelectableText}" Margin="0,0,0,8"
+                         Foreground="{DynamicResource SubtleForeground}" FontStyle="Italic" TextWrapping="Wrap"
+                         Text="If your system has a subwoofer/LFE channel configured in Windows, folds it into the vibration signal alongside every other channel. Turn off to ignore it and use only the other channels. Default: on." />
+
+                <CheckBox x:Name="AudioIncludeCenterCheckBox"
+                          Content="Include Center Channel"
+                          Margin="0,0,0,2"
+                          Checked="AudioIncludeCenterCheckBox_OnChanged"
+                          Unchecked="AudioIncludeCenterCheckBox_OnChanged" />
+                <TextBox Style="{StaticResource SelectableText}" Margin="0,0,0,8"
+                         Foreground="{DynamicResource SubtleForeground}" FontStyle="Italic" TextWrapping="Wrap"
+                         Text="If your system has a dedicated center channel configured in Windows, folds it into the vibration signal alongside every other channel. Turn off to ignore it and use only the other channels. Default: on." />
+
                 <TextBlock Text="Bass Cutoff Frequency" Margin="0,0,0,2" />
                 <TextBox Style="{StaticResource SelectableText}" Margin="0,0,0,2"
                          Foreground="{DynamicResource SubtleForeground}" FontStyle="Italic" TextWrapping="Wrap"
@@ -184,15 +202,6 @@
                             ValueChanged="AudioCutoffSlider_OnValueChanged" />
                     <TextBlock x:Name="AudioCutoffValueText" Width="70" Margin="8,0,0,0" VerticalAlignment="Center" />
                 </StackPanel>
-
-                <CheckBox x:Name="AudioIncludeLfeCheckBox"
-                          Content="Include Subwoofer (LFE) Channel"
-                          Margin="0,0,0,2"
-                          Checked="AudioIncludeLfeCheckBox_OnChanged"
-                          Unchecked="AudioIncludeLfeCheckBox_OnChanged" />
-                <TextBox Style="{StaticResource SelectableText}" Margin="0,0,0,8"
-                         Foreground="{DynamicResource SubtleForeground}" FontStyle="Italic" TextWrapping="Wrap"
-                         Text="If your system has a subwoofer/LFE channel configured in Windows, folds it into the vibration signal alongside every other channel. Turn off to ignore it and use only the other channels. Default: on." />
 
                 <TextBlock Text="Attack Time" Margin="0,0,0,2" />
                 <TextBox Style="{StaticResource SelectableText}" Margin="0,0,0,2"

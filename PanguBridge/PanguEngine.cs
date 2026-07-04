@@ -260,6 +260,7 @@ public sealed class PanguEngine : IDisposable
             AudioAutoHaptics.ReleaseMs       = _settings.AudioAutoHapticsReleaseMs;
             AudioAutoHaptics.IntensityBoost  = _settings.AudioAutoHapticsIntensityBoost;
             AudioAutoHaptics.IncludeLfe      = _settings.AudioAutoHapticsIncludeLfe;
+            AudioAutoHaptics.IncludeCenter   = _settings.AudioAutoHapticsIncludeCenter;
             AudioAutoHaptics.Start(_settings.AudioAutoHapticsDeviceId);
         }
         else
@@ -271,9 +272,9 @@ public sealed class PanguEngine : IDisposable
     }
 
     /// <summary>Called by the Options UI's Advanced controls (cutoff/attack/release/intensity
-    /// boost/include-LFE) - updates the live capture's DSP settings in place rather than
-    /// restarting capture, so dragging a slider doesn't glitch the audio stream on every tick.
-    /// Noise Floor sliders don't call this - they're read fresh from AppSettings in
+    /// boost/include-LFE/include-center) - updates the live capture's DSP settings in place
+    /// rather than restarting capture, so dragging a slider doesn't glitch the audio stream on
+    /// every tick. Noise Floor sliders don't call this - they're read fresh from AppSettings in
     /// ApplyRumbleOutput instead, since one shared capture output feeds three differently-gated
     /// motor groups.</summary>
     public void RefreshAudioAutoHapticsTuning()
@@ -283,6 +284,7 @@ public sealed class PanguEngine : IDisposable
         AudioAutoHaptics.ReleaseMs      = _settings.AudioAutoHapticsReleaseMs;
         AudioAutoHaptics.IntensityBoost = _settings.AudioAutoHapticsIntensityBoost;
         AudioAutoHaptics.IncludeLfe     = _settings.AudioAutoHapticsIncludeLfe;
+        AudioAutoHaptics.IncludeCenter  = _settings.AudioAutoHapticsIncludeCenter;
     }
 
     /// <summary>Called by the HIDMaestro tab's Submit Rate slider - updates the live submit

@@ -60,6 +60,7 @@ public partial class SettingsView : UserControl
         AudioTriggerPulledNoiseFloorValueText.Text = $"{_settings.AudioAutoHapticsTriggerPulledNoiseFloor:0}%";
         AudioTriggerIdleNoiseFloorValueText.Text   = $"{_settings.AudioAutoHapticsTriggerIdleNoiseFloor:0}%";
         AudioIncludeLfeCheckBox.IsChecked = _settings.AudioAutoHapticsIncludeLfe;
+        AudioIncludeCenterCheckBox.IsChecked = _settings.AudioAutoHapticsIncludeCenter;
 
         AdaptiveTriggerSimulationCheckBox.IsChecked = _settings.AdaptiveTriggerSimulation;
         AdaptiveTriggerIgnoreIntensityCheckBox.IsChecked = _settings.AdaptiveTriggerIgnoreIntensity;
@@ -304,6 +305,14 @@ public partial class SettingsView : UserControl
     {
         if (_suppressEvents) return;
         _settings.AudioAutoHapticsIncludeLfe = AudioIncludeLfeCheckBox.IsChecked == true;
+        _settings.Save();
+        _engine.RefreshAudioAutoHapticsTuning();
+    }
+
+    private void AudioIncludeCenterCheckBox_OnChanged(object sender, RoutedEventArgs e)
+    {
+        if (_suppressEvents) return;
+        _settings.AudioAutoHapticsIncludeCenter = AudioIncludeCenterCheckBox.IsChecked == true;
         _settings.Save();
         _engine.RefreshAudioAutoHapticsTuning();
     }

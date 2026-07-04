@@ -17,8 +17,8 @@ about that rather than try to hide it.
 - [What It Does](#what-it-does)
 - [Requirements](#requirements)
 - [Installation](#installation)
-  - [HIDMaestro](#more-hidmaestro)
-  - [vJoy (Legacy)](#more-vjoy-legacy)
+  - [HIDMaestro](#additional-info-hidmaestro)
+  - [vJoy (Legacy)](#additional-info-vjoy-legacy)
 - [Steam Input: What to Expect](#steam-input-what-to-expect)
 - [Limitations](#limitations)
 - [Building From Source](#building-from-source)
@@ -29,7 +29,7 @@ about that rather than try to hide it.
 
 ## Features
 
-1. Real Steam Input support - all buttons can be mapped independenly, including special buttons.
+1. Steam Input support - all buttons can be mapped independenly, including special buttons.
 2. Light/LED control is passed along to Steam Input.
 3. Many more rumble options than the stock app.
 4. Simulated Adaptive Trigger option, using the motors in the triggers (impulse triggers).
@@ -77,7 +77,7 @@ app. The legacy vJoy path needs a separate driver install; see below.
 5. On the Status page, press the Install Driver button for HIDMaestro (unless you wish to use vJoy).
 6. Disable the Pangu's default "Xbox 360 Controller for Windows" in device manager.
 
-### More: Disable the Pangu's built-in Xbox 360 device
+### Additional Info: Disabling the Pangu's built-in Xbox 360 device
 
 The Pangu exposes a standard Xbox 360-compatible XInput device alongside its vendor HID
 interface. With Pangu Bridge's virtual DualSense Edge also present, Steam (and some games) will
@@ -89,7 +89,7 @@ cause games to see double inputs, steam to see double home buttons, and generall
 Let Windows restart when asked. This only affects the redundant XInput node, as PanguBridge reads the controller
 through a completely separate USB interface and is unaffected.
 
-### More: HIDMaestro
+### Additional Info: HIDMaestro
 
 This is the default backend and needs no separate driver download - HIDMaestro's runtime is
 bundled with PanguBridge itself.
@@ -103,7 +103,7 @@ bundled with PanguBridge itself.
 That's it. Everything else (button mapping, Steam Input setup) is handled automatically
 because the virtual controller presents itself as a DualSense Edge, and Steam can't tell the difference.
 
-### More: vJoy (Legacy)
+### Additional Info: vJoy (Legacy)
 
 A fallback output mode for setups that can't use HIDMaestro. **Not recommended** for regular
 use - it has no rumble support (see [Technical Notes](#technical-notes-usb-protocol-reverse-engineering)

@@ -204,6 +204,13 @@ public sealed class AppSettings
     /// either way.</summary>
     public bool AudioAutoHapticsIncludeLfe { get; set; } = true;
 
+    /// <summary>When on (default), a dedicated center channel - if the capture device's format
+    /// declares one - is folded into both the left and right vibration signals alongside every
+    /// other channel the format declares. Off skips the center channel specifically; all
+    /// non-center channels (front left/right, LFE, rear/side, etc.) are still used either
+    /// way.</summary>
+    public bool AudioAutoHapticsIncludeCenter { get; set; } = true;
+
     /// <summary>Noise gates, 0-100 each (percent of the fully soft-clipped output range - see
     /// AudioAutoHapticsCapture.OnDataAvailable and PanguEngine.ApplyRumbleOutput). Whichever
     /// motor group a given audio sample would drive, if that group's floor isn't cleared the
@@ -211,9 +218,9 @@ public sealed class AppSettings
     /// background audio doesn't keep the motors lightly buzzing. Split per motor group (rather
     /// than one shared floor) since grip and trigger, and a trigger's pulled vs idle state,
     /// warrant different sensitivity. 0 disables that group's gate entirely.</summary>
-    public double AudioAutoHapticsGripNoiseFloor { get; set; } = 10.0;
-    public double AudioAutoHapticsTriggerPulledNoiseFloor { get; set; } = 2.0;
-    public double AudioAutoHapticsTriggerIdleNoiseFloor { get; set; } = 5.0;
+    public double AudioAutoHapticsGripNoiseFloor { get; set; } = 35.0;
+    public double AudioAutoHapticsTriggerPulledNoiseFloor { get; set; } = 10.0;
+    public double AudioAutoHapticsTriggerIdleNoiseFloor { get; set; } = 35.0;
 
     /// <summary>When on, the trigger motors stop following RumbleMode's generic rumble routing
     /// and instead buzz based on the game's real DualSense adaptive-trigger effect data,

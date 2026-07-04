@@ -177,12 +177,18 @@ default (`AppSettings.AudioAutoHapticsEnabled`).
 WASAPI loopback capture (`NAudio.Wave.WasapiLoopbackCapture`) against a chosen render device,
 processed per audio buffer in `AudioAutoHapticsCapture.OnDataAvailable`:
 
-1. **Channel fold-down** - the front left/right channels seed separate Left/Right chains; every
-   other channel the format declares (center, rear/side, height, etc. on 5.1/7.1 setups) is
-   summed into *both* chains equally, since there's no reliable way to map an arbitrary surround
-   channel to one physical motor. The LFE/subwoofer channel (if the format declares one) folds
-   in the same way when `AudioAutoHapticsIncludeLfe` is on (default), or is skipped entirely
-   when off.
+1. **Channel classification and fold-down** (`AudioAutoHapticsCapture.ClassifyChannels`) - every
+   channel the format's WAVEFORMATEXTENSIBLE speaker mask designates as a left-side position
+   (front, back, side, or height - doesn't matter which) sums directly into the Left chain, and
+   the mirrored right-side positions sum into the Right chain, with no averaging between them.
+   So on a 5.1/7.1 source, content on the *rear* left channel still buzzes the left motor, not
+   just the front-left pair. Center-ish positions (front/back/top center) and the LFE/subwoofer
+   channel are non-directional by nature, so each folds into *both* chains equally instead,
+   independently controlled: `AudioAutoHapticsIncludeCenter` and `AudioAutoHapticsIncludeLfe`
+   (both default on) - turning either off skips just that channel, not the whole fold-down. A
+   channel the mask doesn't recognize, or a >2-channel format with no mask to classify by at
+   all, falls back to folding into both chains equally rather than being silently dropped. Plain
+   stereo (or no mask) assumes conventional Left/Right channel order.
 2. **Low-pass filter** (`CutoffHz`, default 160 Hz) - isolates bass, since that's what a rumble
    motor can actually reproduce the feel of.
 3. **Asymmetric envelope follower** (`AttackMs`/`ReleaseMs`, default 1.0 ms / 80 ms) - tracks the
@@ -239,9 +245,9 @@ Ambient/background audio can otherwise keep a motor lightly buzzing even at very
 Three independent floors (percent of the soft-clipped 0-255 range, `Math.Clamp`-ed to 0-100)
 gate a sample to 0 instead of letting a small nonzero value through:
 
-- `AudioAutoHapticsGripNoiseFloor` (default 10%)
-- `AudioAutoHapticsTriggerPulledNoiseFloor` (default 2%)
-- `AudioAutoHapticsTriggerIdleNoiseFloor` (default 5%)
+- `AudioAutoHapticsGripNoiseFloor` (default 35%)
+- `AudioAutoHapticsTriggerPulledNoiseFloor` (default 10%)
+- `AudioAutoHapticsTriggerIdleNoiseFloor` (default 35%)
 
 Gating happens in `PanguEngine.ApplyRumbleOutput` (`ApplyNoiseFloor`), not in
 `AudioAutoHapticsCapture` itself, since the same captured Left/Right intensity feeds all three
