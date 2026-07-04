@@ -206,7 +206,17 @@ public partial class App : Application
 
         _mainWindow = new MainWindow(_engine, settings);
         _mainWindow.Icon = TryLoadWindowIcon();
-        _mainWindow.Show();
+
+        // Task Scheduler autostart (see Autostart.cs) passes --minimized so a logon launch
+        // stays tray-only instead of popping the window up over whatever the user is doing.
+        // EnsureHandle() creates the window's real HWND (needed for the WndProc hook below,
+        // and for DarkTitleBar.Apply via MainWindow's SourceInitialized handler) without ever
+        // making it visible - Show() is what the manual-launch path uses for that instead.
+        bool startMinimized = e.Args.Contains("--minimized", StringComparer.OrdinalIgnoreCase);
+        if (startMinimized)
+            new WindowInteropHelper(_mainWindow).EnsureHandle();
+        else
+            _mainWindow.Show();
 
         if (PresentationSource.FromVisual(_mainWindow) is HwndSource hwndSource)
             hwndSource.AddHook(WndProc);

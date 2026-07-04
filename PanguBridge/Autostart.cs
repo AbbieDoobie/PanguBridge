@@ -46,7 +46,9 @@ public static class Autostart
             // /F forces overwrite of any existing task with this name, so repeated
             // enable/disable/enable never creates duplicates - it just replaces itself.
             // /RL HIGHEST is what makes this launch pre-elevated, with no logon UAC prompt.
-            string args = $"/Create /TN \"{TaskName}\" /TR \"\\\"{ExePath}\\\"\" /SC ONLOGON /RL HIGHEST /F";
+            // --minimized tells App.OnStartup not to show the main window - a manual double-click
+            // launch (no argument) still opens visibly as normal.
+            string args = $"/Create /TN \"{TaskName}\" /TR \"\\\"{ExePath}\\\" --minimized\" /SC ONLOGON /RL HIGHEST /F";
             var (exitCode, stdout) = RunSchtasks(args, ProcessTimeoutMs);
             if (exitCode == 0) return true;
 
