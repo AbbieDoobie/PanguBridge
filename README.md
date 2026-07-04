@@ -78,11 +78,11 @@ app. The legacy vJoy path needs a separate driver install; see below.
 5. On the Status page, press the Install Driver button for HIDMaestro (unless you wish to use vJoy).
 6. Disable the Pangu's default "Xbox 360 Controller for Windows" in device manager. Restart if asked.
 
----
+### Additional Info: 
 
 <a name="additional-info-disabling-the-pangus-built-in-xbox-360-device"></a>
 <details>
-<summary>Disabling the Pangu's built-in Xbox 360 device</summary>
+<summary>Disabling the Pangu's built-in Xbox 360 Controller in Device Manager</summary>
 
 The Pangu exposes a standard Xbox 360-compatible XInput device alongside its vendor HID
 interface. With Pangu Bridge's virtual DualSense Edge also present, Steam (and some games) will
