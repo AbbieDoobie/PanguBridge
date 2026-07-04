@@ -175,10 +175,13 @@ puts out the same bits regardless of which A button you press.
 5. You can't combine multiple touchpad touch inputs for fancy Steam Input shenanigans, they just morph into one button. So
 if you want to be able to hold LM and RM together for a special layout, you will need to change the DualSense mapping (in the
 HIDMaestro section).
-6. Beitong could change the raw report at any time with an update, and this could stop working.
-7. Only one controller is converted for the time being, I don't have two of these controllers to test with.
-8. Haptic Rumble is lost. The DualSense can read two rumble types: Normal and Haptic (as well as Adaptive Triggers). Haptic 
+6. Only one controller is converted for the time being, I don't have two of these controllers to test with.
+7. Haptic Rumble is lost. The DualSense can read two rumble types: Normal and Haptic (as well as Adaptive Triggers). Haptic 
 is not currently converted to Normal, though I am still investigating.
+8. Beitong could change the raw report at any time with an update, and this could stop working. Verified working on Firmware
+   1. Controller: 1.1.25
+   2. Receiver: 1.1.4
+   3. Shoulder Button Module: 1.0.7
 
 ---
 
