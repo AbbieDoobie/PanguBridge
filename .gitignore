@@ -22,3 +22,7 @@ capture_*.log
 
 # Claude Code project instructions - not for the public repo
 CLAUDE.md
+
+# Packaged release zips - built and attached to GitHub Releases, not committed
+/PanguBridge-*.zip
+/release-staging/
