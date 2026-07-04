@@ -1,8 +1,8 @@
-# PanguBridge
+# Pangu Bridge
 
 A Windows app that reads input from a **Beitong Pangu** wireless controller and re-emits it as a
 virtual **PlayStation DualSense Edge** controller - buttons, sticks, triggers, D-pad, the 9 extra buttons (AI/FN/Profile/M1-M4/LM/RM),
-and rumble. The Dualsense Edge was chosen since it is recognized natively by Steam Input and shouldn't need manual configuration.
+and rumble. The DualSense Edge was chosen since it is recognized natively by Steam Input and shouldn't need manual configuration.
 
 Beitong's app is not needed for this to function, though running their app doesn't harm anything either.
 
@@ -29,11 +29,11 @@ about that rather than try to hide it.
 
 ## Features
 
-1. Steam Input support - all buttons can be mapped independenly, including special buttons.
-2. Light/LED control is passed along to Steam Input.
-3. Many more rumble options than the stock app.
-4. Simulated Adaptive Trigger option, using the motors in the triggers (impulse triggers).
-5. Audio Auto Haptics option, which uses audio to drive haptic rumble (ported from DS5Dongle). 
+1. Steam Input support - all buttons can be mapped independently, including special buttons.
+2. Rumble and haptics are highly configurable.
+   1. Audio Auto Haptics - use audio to drive rumble (ported from DS5Dongle).
+   2. Simulated Adaptive Triggers - use the motors in the triggers (impulse triggers) to simulate adaptive triggers, at least in the position and amount of force (converted to haptics).
+3. Light/LED control through Steam Input.
 
 ---
 
@@ -43,7 +43,7 @@ The Pangu controller ships with a Windows driver that exposes it as a generic XI
 functional, but it strips out the 9 extra buttons (AI/FN/Profile/M1-M4/LM/RM), and Steam Input
 only ever sees "Xbox controller," with no way to remap or even see those extra inputs at all.
 
-PanguBridge reads the controller's **vendor-defined HID interface** directly - the same one
+Pangu Bridge reads the controller's **vendor-defined HID interface** directly - the same one
 Beitong's own iControl app uses - decodes the physical controls, and re-emits the whole thing as a virtual
 DualSense Edge controller via [HIDMaestro](https://github.com/hifihedgehog/HIDMaestro).
 Steam Input recognizes a DualSense Edge natively: every button gets a real name and icon,
@@ -51,7 +51,7 @@ rumble works out of the box, and there's no mapping file to fiddle with.
 
 A legacy vJoy-based output mode also exists for setups that can't or don't want to use
 HIDMaestro, but that requires manual Steam configuration and will not have rumble - see
-[vJoy (Legacy)](#vjoy-legacy) below.
+[vJoy (Legacy)](#additional-info-vjoy-legacy) below.
 
 ---
 
@@ -77,22 +77,26 @@ app. The legacy vJoy path needs a separate driver install; see below.
 5. On the Status page, press the Install Driver button for HIDMaestro (unless you wish to use vJoy).
 6. Disable the Pangu's default "Xbox 360 Controller for Windows" in device manager.
 
+---
+
 ### Additional Info: Disabling the Pangu's built-in Xbox 360 device
 
 The Pangu exposes a standard Xbox 360-compatible XInput device alongside its vendor HID
 interface. With Pangu Bridge's virtual DualSense Edge also present, Steam (and some games) will
 see **two** controllers for the same physical device. Inputs will come through on both, which can
-cause games to see double inputs, steam to see double home buttons, and generally just cause issues.
+cause games to see double inputs, Steam to see double home buttons, and generally just cause issues.
 
 **Recommended:** open **Device Manager** → find the Pangu's **Xbox 360 Controller for Windows** entry
 (usually under "Sound, video and game controllers" or "Human Interface Devices") → right-click → **Disable device**.
-Let Windows restart when asked. This only affects the redundant XInput node, as PanguBridge reads the controller
+Let Windows restart when asked. This only affects the redundant XInput node, as Pangu Bridge reads the controller
 through a completely separate USB interface and is unaffected.
+
+---
 
 ### Additional Info: HIDMaestro
 
 This is the default backend and needs no separate driver download - HIDMaestro's runtime is
-bundled with PanguBridge itself.
+bundled with Pangu Bridge itself.
 
 1. On first launch, click **Install Driver** under the HIDMaestro header in Status. This is a
    one-time step (a UMDF2 driver gets registered in Windows' driver store) and persists across reboots.
@@ -102,6 +106,8 @@ bundled with PanguBridge itself.
 
 That's it. Everything else (button mapping, Steam Input setup) is handled automatically
 because the virtual controller presents itself as a DualSense Edge, and Steam can't tell the difference.
+
+---
 
 ### Additional Info: vJoy (Legacy)
 
@@ -116,7 +122,7 @@ In broad strokes:
 
 1. Install [vJoy](https://github.com/jshafer817/vJoy) (or the actively-maintained
    [BrunnerInnovation fork](https://github.com/BrunnerInnovation/vJoy)).
-2. In PanguBridge's **Options** tab, switch **Virtual Controller Backend** to **vJoy**.
+2. In Pangu Bridge's **Options** tab, switch **Virtual Controller Backend** to **vJoy**.
 3. Open the **vJoy (Legacy)** tab and click **Automatically Configure vJoy Device** (or
    configure it manually with vJoyConf: 19 buttons, the X/Y/Z/Rx/Ry/Rz axes, and 1 continuous
    POV hat).
@@ -138,8 +144,8 @@ but at least it works!
 special keys working, do the following:
 
 1. In Steam, go to **Settings → Controller → General Controller Settings** and let it detect
-   PanguBridge's vJoy device as a generic gamepad.
-2. In PanguBridge's **Steam Input** tab (under vJoy (Legacy)), click **Copy to Clipboard**.
+   Pangu Bridge's vJoy device as a generic gamepad.
+2. In Pangu Bridge's **Steam Input** tab (under vJoy (Legacy)), click **Copy to Clipboard**.
 3. During Steam's own controller configuration flow, click its **Paste from Clipboard**
    button when prompted.
 
@@ -149,21 +155,21 @@ There were too many limitations for rumble to work well going down this avenue, 
 
 ## Limitations
 
-1. Gyro. Still investigating options. Potentially NS mode over bluetooth, but that has a bunch of negatives. PC NS
-mode over the dongle appears to be a dead end.
+1. No Gyro. Still investigating options. Potentially NS mode over bluetooth, but that has a bunch of negatives. PC NS
+mode over the dongle appears to be a dead end. Set Gyro to Mouse Mode in iControl, at least that's what I do.
 2. Resolution and Polling Rate. The raw report used has a 250hz polling rate. Analog inputs are 8bit resolution (0-255).
 3. Real Adaptive Triggers. This controller doesn't have them. The simulation setting is neat though, and I use it myself for games
 that pass Adaptive Trigger output through Steam Input properly. Which isn't a lot, but some do!
 4. Module Layouts. Any combination of 2 analog sticks, 1 dpad, and 1 ABXY works, you can freely move the modules anywhere.
 Sadly however the raw report this relies on currently duplicates 'like' modules. So having two ABXY for example just
 puts out the same bits regardless of which A button you press.
-5. You can't combine mutliple touchpad touch inputs for fancy Steam Input shenanigans, they just morph into one button. So
-if you want to be able to hold LM and RM together for a special layout, you will need to change the Dualsense mapping (in the
+5. You can't combine multiple touchpad touch inputs for fancy Steam Input shenanigans, they just morph into one button. So
+if you want to be able to hold LM and RM together for a special layout, you will need to change the DualSense mapping (in the
 HIDMaestro section).
-6. Beitong could change the raw report at anytime with an update, and this could stop working.
-7. Only one controller is converted for the time being, I don't have two of these controller to test multiple.
+6. Beitong could change the raw report at any time with an update, and this could stop working.
+7. Only one controller is converted for the time being, I don't have two of these controllers to test with.
 8. Haptic Rumble is lost. The DualSense can read three rumble types: Normal, Haptic, and Adaptive Triggers (rumble-ish). Haptic 
-is not currently converted to Normal, though I am still investigating this.
+is not currently converted to Normal, though I am still investigating.
 
 ---
 
@@ -208,9 +214,9 @@ byte-level detail live in `docs/` - this is a summary.
 VID: 0x20BC   PID: 0x5162   Product string: "BTP-PG01A XINPUT DONGLE"
 ```
 
-The dongle exposes 5 USB interfaces; PanguBridge only uses **Interface 4** (vendor-defined
+The dongle exposes 5 USB interfaces; Pangu Bridge only uses **Interface 4** (vendor-defined
 HID, usage page `0xFF80`) - the same one iControl uses for everything except gyro-as-mouse
-output. Reading only this interface means PanguBridge never touches the OS's XInput driver
+output. Reading only this interface means Pangu Bridge never touches the OS's XInput driver
 stack at all, which is what lets the "disable the Xbox 360 device" step above work cleanly
 without breaking input.
 
@@ -266,7 +272,7 @@ The important catch: grip's report and the trigger fire report are **the same re
 (`0x16`) and overlap the same byte range - grip's real value lives in bytes `[2]`/`[3]`
 (mirrored into `[4]`/`[5]`), while the trigger fire flags live in `[4]`/`[5]`. The device has
 no concept of a partial update - every `0x16` write is the complete truth for all 4 bytes at
-once. PanguBridge sends grip and trigger as **one combined report** (grip's real magnitude in
+once. Pangu Bridge sends grip and trigger as **one combined report** (grip's real magnitude in
 `[2]`/`[3]`, trigger's fire flags in `[4]`/`[5]`) specifically to avoid one silently
 overwriting the other when both need to be active simultaneously - see `docs/rumble.md` for
 the full investigation and `HidReader.TrySendMotors`.
