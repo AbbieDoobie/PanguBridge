@@ -80,7 +80,9 @@ app. The legacy vJoy path needs a separate driver install; see below.
 
 ---
 
-### Additional Info: Disabling the Pangu's built-in Xbox 360 device
+<a name="additional-info-disabling-the-pangus-built-in-xbox-360-device"></a>
+<details>
+<summary>Disabling the Pangu's built-in Xbox 360 device</summary>
 
 The Pangu exposes a standard Xbox 360-compatible XInput device alongside its vendor HID
 interface. With Pangu Bridge's virtual DualSense Edge also present, Steam (and some games) will
@@ -92,9 +94,11 @@ cause games to see double inputs, Steam to see double home buttons, and generall
 Let Windows restart when asked. This only affects the redundant XInput node, as Pangu Bridge reads the controller
 through a completely separate USB interface and is unaffected.
 
----
+</details>
 
-### Additional Info: HIDMaestro
+<a name="additional-info-hidmaestro"></a>
+<details>
+<summary>HIDMaestro</summary>
 
 This is the default backend and needs no separate driver download - HIDMaestro's runtime is
 bundled with Pangu Bridge itself.
@@ -108,9 +112,11 @@ bundled with Pangu Bridge itself.
 That's it. Everything else (button mapping, Steam Input setup) is handled automatically
 because the virtual controller presents itself as a DualSense Edge, and Steam can't tell the difference.
 
----
+</details>
 
-### Additional Info: vJoy (Legacy)
+<a name="additional-info-vjoy-legacy"></a>
+<details>
+<summary>vJoy (Legacy)</summary>
 
 A fallback output mode for setups that can't use HIDMaestro. **Not recommended** for regular
 use - it has no rumble support (see [Technical Notes](#technical-notes-usb-protocol-reverse-engineering)
@@ -131,6 +137,8 @@ In broad strokes:
 5. In Steam, set the device up as a generic controller, then use the **Steam Input** tab's
    "Copy to Clipboard" button and Steam's own "Paste from Clipboard" option during controller
    setup - see [Steam Input: What to Expect](#steam-input-what-to-expect) below.
+
+</details>
 
 ---
 
@@ -174,7 +182,9 @@ is not currently converted to Normal, though I am still investigating.
 
 ---
 
-## Building From Source
+<a name="building-from-source"></a>
+<details>
+<summary>Building From Source</summary>
 
 Requires the .NET 10 SDK and Windows (the project targets `net10.0-windows` and uses WPF).
 
@@ -201,9 +211,13 @@ PanguBridge/
 
 See `docs/architecture.md` for the full set of design decisions and their rationale.
 
+</details>
+
 ---
 
-## Technical Notes: USB Protocol Reverse-Engineering
+<a name="technical-notes-usb-protocol-reverse-engineering"></a>
+<details>
+<summary>Technical Notes: USB Protocol Reverse-Engineering</summary>
 
 All of this was reverse-engineered with Wireshark + USBPcap against Beitong's own iControl
 app, since the Pangu has no public protocol documentation. Full capture methodology and
@@ -277,6 +291,8 @@ once. Pangu Bridge sends grip and trigger as **one combined report** (grip's rea
 `[2]`/`[3]`, trigger's fire flags in `[4]`/`[5]`) specifically to avoid one silently
 overwriting the other when both need to be active simultaneously - see `docs/rumble.md` for
 the full investigation and `HidReader.TrySendMotors`.
+
+</details>
 
 ---
 
