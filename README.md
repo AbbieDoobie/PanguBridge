@@ -1,10 +1,11 @@
 # Pangu Bridge
 
 A Windows app that reads input from a **Beitong Pangu** wireless controller and re-emits it as a
-virtual **PlayStation DualSense Edge** controller - buttons, sticks, triggers, D-pad, the 9 extra buttons (AI/FN/Profile/M1-M4/LM/RM),
-and rumble. The DualSense Edge was chosen since it is recognized natively by Steam Input and shouldn't need manual configuration.
+virtual **PlayStation DualSense Edge** controller - buttons, sticks, triggers, D-pad, the 9 extra buttons (AI/FN/Profile/M1-M4/LM/RM), 
+rumble, and lighting. The DualSense Edge was chosen since it is recognized natively by Steam Input and shouldn't need manual configuration.
 
-Beitong's app is not needed for this to function, though running their app doesn't harm anything either.
+Beitong's app is not needed for this to function, though using their app doesn't harm anything either. I would recommend closing it 
+while using Pangu Bridge though.
 
 In the spirit of transparency, note that this application was written with the help of an LLM. I'd rather be forward
 about that rather than try to hide it.
@@ -30,7 +31,7 @@ about that rather than try to hide it.
 ## Features
 
 1. Steam Input support - all buttons can be mapped independently, including special buttons.
-2. Rumble and haptics are highly configurable.
+2. Rumble and haptics are highly configurable, including some custom options:
    1. Audio Auto Haptics - use audio to drive rumble (ported from DS5Dongle).
    2. Simulated Adaptive Triggers - use the motors in the triggers (impulse triggers) to simulate adaptive triggers, at least in the position and amount of force (converted to haptics).
 3. Light/LED control through Steam Input.
@@ -75,7 +76,7 @@ app. The legacy vJoy path needs a separate driver install; see below.
 4. Run `PanguBridge.exe`. It requests administrator privileges on launch - HIDMaestro needs
    this to create the virtual controller.
 5. On the Status page, press the Install Driver button for HIDMaestro (unless you wish to use vJoy).
-6. Disable the Pangu's default "Xbox 360 Controller for Windows" in device manager.
+6. Disable the Pangu's default "Xbox 360 Controller for Windows" in device manager. Restart if asked.
 
 ---
 
@@ -168,7 +169,7 @@ if you want to be able to hold LM and RM together for a special layout, you will
 HIDMaestro section).
 6. Beitong could change the raw report at any time with an update, and this could stop working.
 7. Only one controller is converted for the time being, I don't have two of these controllers to test with.
-8. Haptic Rumble is lost. The DualSense can read three rumble types: Normal, Haptic, and Adaptive Triggers (rumble-ish). Haptic 
+8. Haptic Rumble is lost. The DualSense can read two rumble types: Normal and Haptic (as well as Adaptive Triggers). Haptic 
 is not currently converted to Normal, though I am still investigating.
 
 ---
