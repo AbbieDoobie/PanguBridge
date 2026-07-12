@@ -65,6 +65,33 @@ public partial class SettingsView : UserControl
         AdaptiveTriggerSimulationCheckBox.IsChecked = _settings.AdaptiveTriggerSimulation;
         AdaptiveTriggerIgnoreIntensityCheckBox.IsChecked = _settings.AdaptiveTriggerIgnoreIntensity;
         AdaptiveTriggerDisableMatchingGripCheckBox.IsChecked = _settings.AdaptiveTriggerDisableMatchingGrip;
+
+        // Trigger Gain Mode lives on the controller itself, not in settings.json - reflects
+        // whatever HidReader already knows (false until the first connect's query resolves),
+        // then TriggerGainModeChanged keeps it live from there. See HidReader.QueryTriggerGainMode.
+        TriggerGainModeCheckBox.IsChecked = _engine.HidReader.TriggerGainMode;
+        _engine.HidReader.TriggerGainModeChanged += OnTriggerGainModeChanged;
+        _suppressEvents = false;
+    }
+
+    private void OnTriggerGainModeChanged(bool enabled) => Dispatcher.Invoke(() =>
+    {
+        _suppressEvents = true;
+        TriggerGainModeCheckBox.IsChecked = enabled;
+        _suppressEvents = false;
+    });
+
+    private void TriggerGainModeCheckBox_OnChanged(object sender, RoutedEventArgs e)
+    {
+        if (_suppressEvents) return;
+        bool enabled = TriggerGainModeCheckBox.IsChecked == true;
+        if (_engine.HidReader.TrySetTriggerGainMode(enabled)) return;
+
+        // Not connected right now - revert the checkbox rather than claiming a change that
+        // didn't actually reach the controller (there's no settings.json fallback to fall back
+        // to, since this setting only exists on the controller itself).
+        _suppressEvents = true;
+        TriggerGainModeCheckBox.IsChecked = !enabled;
         _suppressEvents = false;
     }
 
@@ -208,6 +235,55 @@ public partial class SettingsView : UserControl
         _settings.TriggerRightIntensity = (int)e.NewValue;
         _settings.Save();
         _engine.RefreshRumbleSettings();
+    }
+
+    private void TestGripLeftButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (!_engine.HidReader.IsConnected) return;
+        byte scaled = PanguEngine.ScaleGripIntensity(255, _settings.GripLeftIntensity);
+        _ = RunMotorPulseTestAsync(TestGripLeftButton, scaled, 0, 0, 0);
+    }
+
+    private void TestGripRightButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (!_engine.HidReader.IsConnected) return;
+        byte scaled = PanguEngine.ScaleGripIntensity(255, _settings.GripRightIntensity);
+        _ = RunMotorPulseTestAsync(TestGripRightButton, 0, scaled, 0, 0);
+    }
+
+    private void TestTriggerLeftButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (!_engine.HidReader.IsConnected) return;
+        _ = RunMotorPulseTestAsync(TestTriggerLeftButton, 0, 0, _settings.TriggerLeftIntensity, 0);
+    }
+
+    private void TestTriggerRightButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (!_engine.HidReader.IsConnected) return;
+        _ = RunMotorPulseTestAsync(TestTriggerRightButton, 0, 0, 0, _settings.TriggerRightIntensity);
+    }
+
+    // Resends every 100ms for a full second rather than a single fire-and-wait call - a trigger
+    // level needs the 0x62 report refreshed periodically to keep buzzing (see HidReader.
+    // TrySendMotors's doc comment), and this keeps grip consistent with that same cadence rather
+    // than assuming grip alone can hold a magnitude unrefreshed for the full second.
+    private async Task RunMotorPulseTestAsync(Button button, byte gripLeft, byte gripRight, int trigLeft, int trigRight)
+    {
+        button.IsEnabled = false;
+        try
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(1);
+            while (DateTime.UtcNow < deadline)
+            {
+                _engine.HidReader.TrySendMotors(gripLeft, gripRight, trigLeft, trigRight);
+                await Task.Delay(100);
+            }
+            _engine.HidReader.TrySendMotors(0, 0, 0, 0);
+        }
+        finally
+        {
+            Dispatcher.Invoke(() => button.IsEnabled = true);
+        }
     }
 
     private static readonly (AudioAutoHapticsMode Mode, string Display)[] AudioModes =

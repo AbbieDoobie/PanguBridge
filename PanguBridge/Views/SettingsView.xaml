@@ -67,12 +67,16 @@
             <Slider x:Name="GripLeftSlider" Width="250" Minimum="0" Maximum="100"
                     ValueChanged="GripLeftSlider_OnValueChanged" />
             <TextBlock x:Name="GripLeftValueText" Width="30" Margin="8,0,0,0" VerticalAlignment="Center" />
+            <Button x:Name="TestGripLeftButton" Content="Test" Width="50" Margin="8,0,0,0"
+                    Click="TestGripLeftButton_OnClick" />
         </StackPanel>
         <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
             <TextBlock Text="Right Grip" Width="110" VerticalAlignment="Center" />
             <Slider x:Name="GripRightSlider" Width="250" Minimum="0" Maximum="100"
                     ValueChanged="GripRightSlider_OnValueChanged" />
             <TextBlock x:Name="GripRightValueText" Width="30" Margin="8,0,0,0" VerticalAlignment="Center" />
+            <Button x:Name="TestGripRightButton" Content="Test" Width="50" Margin="8,0,0,0"
+                    Click="TestGripRightButton_OnClick" />
         </StackPanel>
         <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
             <TextBlock Text="Left Trigger" Width="110" VerticalAlignment="Center" />
@@ -80,28 +84,55 @@
                     TickFrequency="1" IsSnapToTickEnabled="True" TickPlacement="BottomRight"
                     ValueChanged="TriggerLeftSlider_OnValueChanged" />
             <TextBlock x:Name="TriggerLeftValueText" Width="30" Margin="8,0,0,0" VerticalAlignment="Center" />
+            <Button x:Name="TestTriggerLeftButton" Content="Test" Width="50" Margin="8,0,0,0"
+                    Click="TestTriggerLeftButton_OnClick" />
         </StackPanel>
-        <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
             <TextBlock Text="Right Trigger" Width="110" VerticalAlignment="Center" />
             <Slider x:Name="TriggerRightSlider" Width="250" Minimum="0" Maximum="4"
                     TickFrequency="1" IsSnapToTickEnabled="True" TickPlacement="BottomRight"
                     ValueChanged="TriggerRightSlider_OnValueChanged" />
             <TextBlock x:Name="TriggerRightValueText" Width="30" Margin="8,0,0,0" VerticalAlignment="Center" />
+            <Button x:Name="TestTriggerRightButton" Content="Test" Width="50" Margin="8,0,0,0"
+                    Click="TestTriggerRightButton_OnClick" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+            <CheckBox x:Name="TriggerGainModeCheckBox" Content="Enable Trigger Gain Mode"
+                      Checked="TriggerGainModeCheckBox_OnChanged" Unchecked="TriggerGainModeCheckBox_OnChanged" />
+            <Border Width="16" Height="16" CornerRadius="8" Margin="6,0,0,0"
+                    BorderBrush="{DynamicResource SubtleForeground}" BorderThickness="1">
+                <Border.ToolTip>
+                    <ToolTip MaxWidth="280">
+                        <TextBlock TextWrapping="Wrap"
+                                   Text="Increases the intensity of trigger vibration at all levels. Will use more power, and make more noise." />
+                    </ToolTip>
+                </Border.ToolTip>
+                <TextBlock Text="?" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Foreground="{DynamicResource SubtleForeground}" />
+            </Border>
         </StackPanel>
 
         <Separator Margin="0,0,0,12" />
 
         <!-- Rumble - Audio Auto Haptics -->
         <TextBlock Text="Rumble - Audio Auto Haptics" FontWeight="SemiBold" Margin="0,0,0,4" />
-        <CheckBox x:Name="AudioAutoHapticsEnabledCheckBox"
-                  Content="Enable Audio Auto Haptics"
-                  Margin="0,0,0,4"
-                  Checked="AudioAutoHapticsEnabledCheckBox_OnChanged"
-                  Unchecked="AudioAutoHapticsEnabledCheckBox_OnChanged" />
-        <TextBox Style="{StaticResource SelectableText}" Margin="0,0,0,8"
-                 Foreground="{DynamicResource SubtleForeground}" FontStyle="Italic"
-                 TextWrapping="Wrap"
-                 Text="Derives rumble from whatever audio is currently playing, using left-side sound for the left motors and right-side sound for the right motors. Effect is only applied to motors that are active based on Rumble Type setting above - it can't turn on a motor that Rumble Type excludes." />
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+            <CheckBox x:Name="AudioAutoHapticsEnabledCheckBox"
+                      Content="Enable Audio Auto Haptics"
+                      Checked="AudioAutoHapticsEnabledCheckBox_OnChanged"
+                      Unchecked="AudioAutoHapticsEnabledCheckBox_OnChanged" />
+            <Border Width="16" Height="16" CornerRadius="8" Margin="6,0,0,0"
+                    BorderBrush="{DynamicResource SubtleForeground}" BorderThickness="1">
+                <Border.ToolTip>
+                    <ToolTip MaxWidth="280">
+                        <TextBlock TextWrapping="Wrap"
+                                   Text="Derives rumble from whatever audio is currently playing, using left-side sound for the left motors and right-side sound for the right motors. Effect is only applied to motors that are active based on Rumble Type setting above - it can't turn on a motor that Rumble Type excludes." />
+                    </ToolTip>
+                </Border.ToolTip>
+                <TextBlock Text="?" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Foreground="{DynamicResource SubtleForeground}" />
+            </Border>
+        </StackPanel>
 
         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
             <TextBlock Text="Audio Device" Width="110" VerticalAlignment="Center" />
@@ -239,29 +270,45 @@
 
         <!-- Rumble - Adaptive Trigger -->
         <TextBlock Text="Rumble - Adaptive Trigger" FontWeight="SemiBold" Margin="0,0,0,4" />
-        <CheckBox x:Name="AdaptiveTriggerSimulationCheckBox"
-                  Content="Simulate Adaptive Triggers with Trigger vibration"
-                  Margin="0,0,0,4"
-                  Checked="AdaptiveTriggerSimulationCheckBox_OnChanged"
-                  Unchecked="AdaptiveTriggerSimulationCheckBox_OnChanged" />
-        <TextBox Style="{StaticResource SelectableText}" Margin="0,0,0,4"
-                 Foreground="{DynamicResource SubtleForeground}" FontStyle="Italic"
-                 TextWrapping="Wrap"
-                 Text="While on, trigger motors ignore Rumble Type and Audio Auto Haptics, only responding to Adaptive Trigger data; grip motors are unaffected." />
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+            <CheckBox x:Name="AdaptiveTriggerSimulationCheckBox"
+                      Content="Simulate Adaptive Triggers with Trigger vibration"
+                      Checked="AdaptiveTriggerSimulationCheckBox_OnChanged"
+                      Unchecked="AdaptiveTriggerSimulationCheckBox_OnChanged" />
+            <Border Width="16" Height="16" CornerRadius="8" Margin="6,0,0,0"
+                    BorderBrush="{DynamicResource SubtleForeground}" BorderThickness="1">
+                <Border.ToolTip>
+                    <ToolTip MaxWidth="280">
+                        <TextBlock TextWrapping="Wrap"
+                                   Text="While on, trigger motors ignore Rumble Type and Audio Auto Haptics, only responding to Adaptive Trigger data; grip motors are unaffected." />
+                    </ToolTip>
+                </Border.ToolTip>
+                <TextBlock Text="?" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Foreground="{DynamicResource SubtleForeground}" />
+            </Border>
+        </StackPanel>
         <CheckBox x:Name="AdaptiveTriggerIgnoreIntensityCheckBox"
                   Content="Ignore Rumble Intensity Sliders Above"
                   Margin="0,0,0,4"
                   Checked="AdaptiveTriggerIgnoreIntensityCheckBox_OnChanged"
                   Unchecked="AdaptiveTriggerIgnoreIntensityCheckBox_OnChanged" />
-        <CheckBox x:Name="AdaptiveTriggerDisableMatchingGripCheckBox"
-                  Content="Disable Matching Grip Motor During Adaptive Trigger"
-                  Margin="0,0,0,4"
-                  Checked="AdaptiveTriggerDisableMatchingGripCheckBox_OnChanged"
-                  Unchecked="AdaptiveTriggerDisableMatchingGripCheckBox_OnChanged" />
-        <TextBox Style="{StaticResource SelectableText}" Margin="0,0,0,16"
-                 Foreground="{DynamicResource SubtleForeground}" FontStyle="Italic"
-                 TextWrapping="Wrap"
-                 Text="Workaround for an issue where Adaptive Trigger vibration may cut out when the Grip Motor on the same side vibrates." />
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+            <CheckBox x:Name="AdaptiveTriggerDisableMatchingGripCheckBox"
+                      Content="Disable Matching Grip Motor During Adaptive Trigger"
+                      Checked="AdaptiveTriggerDisableMatchingGripCheckBox_OnChanged"
+                      Unchecked="AdaptiveTriggerDisableMatchingGripCheckBox_OnChanged" />
+            <Border Width="16" Height="16" CornerRadius="8" Margin="6,0,0,0"
+                    BorderBrush="{DynamicResource SubtleForeground}" BorderThickness="1">
+                <Border.ToolTip>
+                    <ToolTip MaxWidth="280">
+                        <TextBlock TextWrapping="Wrap"
+                                   Text="Workaround for an issue where Adaptive Trigger vibration may cut out when the Grip Motor on the same side vibrates." />
+                    </ToolTip>
+                </Border.ToolTip>
+                <TextBlock Text="?" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Foreground="{DynamicResource SubtleForeground}" />
+            </Border>
+        </StackPanel>
 
         <Separator Margin="0,0,0,12" />
 

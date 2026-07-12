@@ -147,6 +147,52 @@ here - it looks like UI resync, not something the firmware requires.
 **The gyro toggle switch only gates mouse output on endpoint 0x83; it has no effect on endpoint
 0x84.**
 
+### Confirmed via iControl's own hidden factory-test screen
+
+iControl ships a manufacturing/QA-only screen with a live gyroscope/accelerometer readout
+(`ac_x`/`ac_y`/`ac_z`, `gy_x`/`gy_y`/`gy_z`), never exposed in the normal consumer UI. Reaching
+it and testing it directly gives an independent, stronger confirmation of the conclusion above.
+
+**How to reach it** (tested against the installed iControl build under
+`D:\Utilities\Beitong` in this investigation - paths/behavior may differ across versions):
+
+1. iControl's `resources/app/00000000.asar` is an Electron ASAR archive containing the app's
+   unminified-enough JS; `betoplib.GetData("config", key)` calls throughout it read directly
+   from `config.ini`'s `[config]` section (confirmed: `Lang=en` in that file matches
+   `GetData("config","Lang")` reads verbatim).
+2. The app's root Vue component has a computed property `inside` that returns
+   `betoplib.GetData("config", "APP1")` and switches the *entire app* (main window and tray
+   menu both) into one of several manufacturing-only modes when set: `inside === "Factory"`
+   (with a device-generation flag also true) renders a `newFactoryTest` component instead of
+   the normal controller UI; other observed values include `"Factory2"` (`newSemiFinished`) and
+   several sibling top-level components (`Production`, `Modularization`, `secondGeneration`)
+   gated the same way. This is read once via a native call, not reactive to a live config
+   edit - a full app restart is required after changing it.
+3. Adding `APP1=Factory` under `config.ini`'s `[config]` section and restarting iControl
+   (fully closed first, including any lingering `betopgame.exe`/`aipan70.exe` processes) opens
+   the factory-test screen directly in place of the normal app.
+4. This screen's button/D-pad/joystick/trigger panels all responded live and correctly during
+   testing. The gyroscope/accelerometer panel stayed at a flat `ac_x/y/z: 0, gy_x/y/z: 0`
+   regardless of physically rotating/tilting the controller, pressing the screen's own
+   "Retest" button, or toggling the controller's physical gyro switch off and on. A real,
+   powered accelerometer at rest should never read exactly zero on every axis simultaneously
+   (gravity alone guarantees a nonzero baseline on at least one axis) - this is a manufacturer's
+   own internal QA tool built specifically to validate this sensor, showing no response under
+   every condition tested.
+5. Revert by removing the `APP1=Factory` line from `config.ini` and restarting iControl again.
+
+**Correction (later investigation):** the conclusion originally drawn here - that the IMU
+might be unpopulated or unwired - was wrong, and was already contradicted by the device's own
+working gyro-as-mouse output (the cursor demonstrably moves when tilting with the gyro toggle
+on). The factory screen's flat zeros have a mundane explanation found in iControl's own
+source: its test-mode init is explicitly skipped on wireless-dongle connections
+(`test_mode_usedongle` flag), and the underlying `enterTestMode` (`02 17 01`) /
+`getTestData` (`02 35`) commands get no reply at all over the dongle when sent directly. The
+gyro/accel readout is a dead diagnostic path over this connection type - the sensor itself
+works. See `docs/config-protocol.md` for the follow-up investigation that confirmed live gyro
+data can be obtained on Interface 4 via the on-controller gyro-to-stick mapping
+(`feeling_map_type`), including what does and does not work for raw gyro output.
+
 ---
 
 ## Gyro Output Mode (Mouse vs. Button)

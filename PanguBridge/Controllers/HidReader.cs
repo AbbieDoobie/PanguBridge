@@ -16,9 +16,15 @@ public sealed class HidReader : IDisposable
     private const int ReconnectDelayMs = 2000;
     private const int KeepaliveIntervalMs = 250;
     private const int ReadTimeoutMs = 1000;
+    private const int TriggerGainQueryTimeoutMs = 1500;
 
     public event Action<GamepadState>? StateChanged;
     public event Action<bool>? ConnectionChanged;
+
+    /// <summary>Fired once per connect with the controller's actual persisted Trigger Gain Mode
+    /// (read from flash, not assumed) - see QueryTriggerGainMode - and again whenever
+    /// TrySetTriggerGainMode changes it.</summary>
+    public event Action<bool>? TriggerGainModeChanged;
 
     private CancellationTokenSource? _cts;
     private Task? _runTask;
@@ -39,6 +45,12 @@ public sealed class HidReader : IDisposable
 
     public GamepadState CurrentState => _lastState;
     public bool IsConnected { get; private set; }
+
+    /// <summary>The controller's Trigger Gain Mode, as read from its own flash on connect (see
+    /// QueryTriggerGainMode) - not an app-side setting, since the controller itself remembers
+    /// this across power cycles independent of PanguBridge. Defaults to false until the first
+    /// successful connect/query.</summary>
+    public bool TriggerGainMode { get; private set; }
 
     /// <summary>Diagnostic detail for the current disconnected state - what FindDevice saw,
     /// or the exact exception from opening/enabling/reading the device. Null while connected.</summary>
@@ -119,12 +131,18 @@ public sealed class HidReader : IDisposable
                 "differ from the 64/65 bytes this app assumes, that's likely the cause.", ex);
         }
 
+        using var sessionCts = CancellationTokenSource.CreateLinkedTokenSource(token);
+        var keepaliveTask = Task.Run(() => KeepaliveLoopAsync(stream, maxOutputLength, sessionCts.Token), sessionCts.Token);
+
+        // Read the controller's actual persisted Trigger Gain Mode before publishing
+        // _activeStream - any config-packet write before this point (e.g. an LED color already
+        // queued up) would carry _ledZoneFlags's still-default value and silently reset the
+        // controller's real state. See docs/led.md.
+        QueryTriggerGainMode(stream, maxOutputLength, maxInputLength);
+
         SetConnected(true);
         _activeStream = stream;
         _activeOutputLength = maxOutputLength;
-
-        using var sessionCts = CancellationTokenSource.CreateLinkedTokenSource(token);
-        var keepaliveTask = Task.Run(() => KeepaliveLoopAsync(stream, maxOutputLength, sessionCts.Token), sessionCts.Token);
 
         try
         {
@@ -170,16 +188,31 @@ public sealed class HidReader : IDisposable
         0x00, 0x0C, 0x3C, 0x96, 0xA5, 0xC3, 0x01, // [2]-[8]
     };
 
+    // Trigger Gain Mode's bit within the 0x62 packet's byte[12] (docs/led.md's LED zone/flash
+    // bitmask byte) - confirmed via USBPcap capture of iControl's own toggle (7 flips, 7/7
+    // correlated) and independently confirmed readable back via BaseProfileQuery below.
+    private const byte TriggerGainBit = 0x20;
+
+    // getProfileData(type=1 "base config", adr=0, len=48) request, reverse-engineered from
+    // iControl's own protocol layer (pgv1.js's getProfileData/getProfileConfig) - queries the
+    // controller's persisted base-config blob directly from flash. The response (report id
+    // 0x52) carries the exact same byte layout as the 0x62 configure write below, including
+    // byte[12], which is the only confirmed way to read Trigger Gain Mode back from the
+    // controller instead of just assuming it. See docs/led.md.
+    private static readonly byte[] BaseProfileQuery = { 0x02, 0x52, 0x00, 0x0C };
+
     // Cached LED state - every 0x62 write carries a full snapshot of trigger level AND LED
     // state together (the device has no concept of a partial update, same as the 0x16 grip/
     // trigger report below), so this has to be cached and resent on every write, including
     // ones only meant to change trigger level. Defaults match the Pangu's factory-default
     // state (white, max brightness, all zones on, flash-on-vibrate off) - see docs/led.md.
     private byte _ledRed = 0xFF, _ledGreen = 0xFF, _ledBlue = 0xFF;
-    // Zone-disable/flash-on-vibrate bits (docs/led.md's byte[12]) - not wired to any control
-    // yet (only RGB color is forwarded from games so far), so this stays at its "all zones on,
-    // flash off" default. Explicit initializer so it reads as a deliberate placeholder rather
-    // than an accidentally-unused field.
+    // Zone-disable/flash-on-vibrate bits plus Trigger Gain Mode (docs/led.md's byte[12]) -
+    // QueryTriggerGainMode overwrites this with the controller's real value on every connect
+    // before anything can write it, so an unrelated zone/flash bit a user set via iControl
+    // survives instead of being silently reset to this "all zones on, flash off, gain off"
+    // default. TrySetTriggerGainMode only ever flips TriggerGainBit within whatever this
+    // currently holds.
     private byte _ledZoneFlags = 0x00;
     private byte _ledBrightness = 4;
     private bool _ledPendingSend = true;
@@ -277,6 +310,35 @@ public sealed class HidReader : IDisposable
         }
     }
 
+    /// <summary>Sets Trigger Gain Mode - a controller-side setting persisted on the Pangu itself
+    /// (see QueryTriggerGainMode), not an app-level one, so there's nothing to save to
+    /// settings.json here. Sends immediately, reusing whatever trigger level was last configured
+    /// so this doesn't disturb an in-progress trigger buzz - see docs/led.md.</summary>
+    public bool TrySetTriggerGainMode(bool enabled)
+    {
+        var stream = _activeStream;
+        if (stream is null) return false;
+
+        try
+        {
+            lock (_writeLock)
+            {
+                _ledZoneFlags = enabled
+                    ? (byte)(_ledZoneFlags | TriggerGainBit)
+                    : (byte)(_ledZoneFlags & ~TriggerGainBit);
+                SendConfigurePacket(stream, _lastConfiguredTriggerLeft < 0 ? 0 : _lastConfiguredTriggerLeft,
+                    _lastConfiguredTriggerRight < 0 ? 0 : _lastConfiguredTriggerRight);
+            }
+            TriggerGainMode = enabled;
+            TriggerGainModeChanged?.Invoke(enabled);
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
     /// <summary>Builds and sends the 0x62 "configure" report - the device has no concept of a
     /// partial update, so every write carries a full snapshot of both trigger level (from the
     /// caller) and LED state (from the cached _led* fields) at once, regardless of which one
@@ -299,6 +361,57 @@ public sealed class HidReader : IDisposable
         configure[18] = 0xFF;
         stream.Write(configure);
         _ledPendingSend = false;
+    }
+
+    /// <summary>Sends BaseProfileQuery and waits (synchronously - called from RunSessionAsync
+    /// before the main read loop starts) for the controller's 0x52 reply, caching byte[12] into
+    /// _ledZoneFlags so TriggerGainMode reflects reality instead of this class's own in-memory
+    /// default. Best-effort: on timeout or write failure, leaves TriggerGainMode/_ledZoneFlags
+    /// exactly as they were (false/0x00 on a first-ever connect) rather than blocking the
+    /// session - a stale/default read is far less disruptive than never connecting.</summary>
+    private void QueryTriggerGainMode(HidStream stream, int outputLength, int inputLength)
+    {
+        var query = new byte[outputLength];
+        Array.Copy(BaseProfileQuery, query, BaseProfileQuery.Length);
+
+        try
+        {
+            // The keepalive loop is already running by this point (started just above in
+            // RunSessionAsync) and writes to this same stream every 250ms - _writeLock is the
+            // same lock TrySendMotors/TrySetLedColor/the keepalive loop all use to serialize
+            // writes, since HidStream doesn't document concurrent-write safety.
+            lock (_writeLock) stream.Write(query);
+        }
+        catch (Exception)
+        {
+            return;
+        }
+
+        var buffer = new byte[inputLength];
+        var deadline = DateTime.UtcNow.AddMilliseconds(TriggerGainQueryTimeoutMs);
+        while (DateTime.UtcNow < deadline)
+        {
+            int read;
+            try
+            {
+                read = stream.Read(buffer, 0, inputLength);
+            }
+            catch (TimeoutException)
+            {
+                continue;
+            }
+            catch (Exception)
+            {
+                return;
+            }
+
+            if (read < 13 || buffer[0] != 0x02 || buffer[1] != 0x52) continue; // not the reply
+
+            _ledZoneFlags = buffer[12];
+            TriggerGainMode = (buffer[12] & TriggerGainBit) != 0;
+            TriggerGainModeChanged?.Invoke(TriggerGainMode);
+            return;
+        }
     }
 
     private void ProcessReport(byte[] report)

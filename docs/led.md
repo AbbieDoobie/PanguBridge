@@ -43,6 +43,12 @@ idx: 0  1  2  3  4  5  6  7  8    9   10  11    12         13                14 
     expose it)
   - `0x40` = front light disabled
   - `0xC0` = both disabled (`0x80 | 0x40`)
+  - `0x20` = Trigger Gain Mode enabled (iControl's "Enable Trigger Gain Mode" toggle - increases
+    trigger vibration intensity at all levels; unrelated to LED despite sharing this byte).
+    Confirmed via a controlled USBPcap capture: toggling the setting 7 times in iControl produced
+    7 alternating `0x62` writes with only this bit differing, and separately confirmed readable
+    back via `BaseProfileQuery` below (not just an artifact of the write). See
+    `docs/usb-reverse-engineering.md`.
   - `0x01` = Flash Lights on Vibrate enabled, ORed on top of whatever zone bits are already set
 - **[13]**: `(LeftTriggerLevel << 4) | BrightnessLevel` - nibble-packed. Brightness is a
   0-indexed 0-4 scale (iControl's UI brightness buttons 4→1 encode as `03,02,01,00`). Left
@@ -53,6 +59,27 @@ idx: 0  1  2  3  4  5  6  7  8    9   10  11    12         13                14 
 - **[15-18]**: `04 00 FF FF` - constant, matches the trigger-config bytes.
 - **[19+]**: `00` padding.
 
+### Reading byte[12] back (`getProfileData` / report `0x52`)
+
+Unlike every other field in this report, byte[12] (specifically Trigger Gain Mode) is not
+write-only. iControl's own protocol layer (`pgv1.js`) has a `getProfileData(type, adr, len)`
+request that reads the controller's persisted base-config blob directly from flash:
+
+```
+Request:  02 52 00 0C 00 00...   (getProfileData(type=1, adr=0, len=48))
+Response: 02 52 00 0C 3C 96 A5 C3 01 [B] [G] [R] [Zone] [TrigL<<4|Bright] [TrigR*0x10+4] 04 00 FF FF 00...
+```
+
+The response is report ID `0x52` (not `0x62`) but is otherwise byte-for-byte the same layout as
+the `0x62` write above, confirmed by the fixed preamble (`00 0C 3C 96 A5 C3 01`) landing at the
+identical offset. This was verified with a listen-only probe that sent only the enable handshake
+and this query - no `0x62` write at all that session - and still got back the controller's real,
+previously-set Trigger Gain state, ruling out this being an echo of something PanguBridge itself
+wrote. This is the only confirmed read path for any bit in this report; the `0x62` write's own
+immediate IN-pipe ACK (a distinct, shorter reply) only fires right after a write and does not
+reflect state otherwise, and iControl's periodic `getBaseInfo` status poll (report `0x15`) queries
+an unrelated struct and never reflects this bit either.
+
 ## Implementation
 
 - `HidReader.ConfigPreamble` covers only the genuinely-fixed 7 bytes (`[2]-[8]`).
@@ -62,6 +89,20 @@ idx: 0  1  2  3  4  5  6  7  8    9   10  11    12         13                14 
   whatever trigger level is current, so a trigger-only send never overwrites LED state and an
   LED-only send (`TrySetLedColor`) never disturbs an in-progress trigger buzz. The device has no
   concept of a partial update - every `0x62` write must carry the full combined state.
+- `HidReader.QueryTriggerGainMode` sends `BaseProfileQuery` and blocks (synchronously, called
+  from `RunSessionAsync` before the main read loop starts and before `_activeStream` is
+  published) for the `0x52` reply, seeding `_ledZoneFlags` with the controller's real byte[12] -
+  including any zone/flash bits a user may have set via iControl, not just Trigger Gain Mode -
+  instead of this class's own in-memory default. This has to happen before `_activeStream` is
+  set: any config-packet write before that point would otherwise carry the still-default
+  `_ledZoneFlags` and silently reset the controller's real state. Best-effort - a timeout or
+  write failure just leaves `TriggerGainMode`/`_ledZoneFlags` as they already were rather than
+  blocking the connection.
+- `HidReader.TrySetTriggerGainMode` flips only `TriggerGainBit` (`0x20`) within whatever
+  `_ledZoneFlags` currently holds and sends immediately - it's a controller-side setting the
+  Pangu itself persists, not an app-level one, so there's no settings.json entry for it.
+  `SettingsView` reflects `HidReader.TriggerGainMode` on load and via the
+  `TriggerGainModeChanged` event, rather than assuming a value.
 - `HidMaestroOutput` decodes the `lightbar` RGB24 field, gated on `validFlag1` bit `0x04`
   (`DS_OUTPUT_VALID_FLAG1_LIGHTBAR_CONTROL_ENABLE`, byte 2 of the report - a different byte from
   the trigger-effect valid flags in byte 1, per the same full-buffer-replace/valid-flag
@@ -83,7 +124,9 @@ idx: 0  1  2  3  4  5  6  7  8    9   10  11    12         13                14 
   described above, not from this nibble. Zone on/off and Flash-on-Vibrate remain unforwarded, at
   their all-zones-on/flash-off defaults.
 - Zone bits (`0x80` grip off / `0x40` front off) and Flash-on-Vibrate (`0x01`) are not exposed
-  as user-facing PanguBridge settings - `_ledZoneFlags` exists in `HidReader` but is unused,
-  staying at its default.
+  as user-facing PanguBridge settings - unlike Trigger Gain Mode (`0x20`), which now is (see
+  "Reading byte[12] back" and "Implementation" above), these three remain unread and unwritten,
+  though `QueryTriggerGainMode` now preserves whatever value they hold on the controller instead
+  of clobbering them back to their all-zones-on/flash-off defaults on the next write.
 - The byte[13] nibble-packing formula would benefit from a capture with trigger level and
   brightness both nonzero at once, if brightness control is ever added.

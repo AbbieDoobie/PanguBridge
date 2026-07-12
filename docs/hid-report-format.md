@@ -97,19 +97,32 @@ while (!cancellationToken.IsCancellationRequested)
                        0x10=A  0x20=B  0x40=X   0x80=Y
 [10] = Button bitmask: 0xC0=Ai (bits 6+7 both set) 0x01=M1 0x02=M2 0x04=M3 0x08=M4
 [11] = Button bitmask: 0x01=LT(digital) 0x02=RT(digital) 0x04=Lm 0x08=Rm
-[18..22], [24], [27], [31], [36]
-     = redundant mirror copies of the same stick/button data in slightly different
-       encodings (e.g. [31] repeats A/B/X/Y as 0x01/0x02/0x04/0x08 instead of [9]'s
-       0x10/0x20/0x40/0x80). Harmless duplicates - not needed for decoding.
-[12..15], [33..34]
-     = NOT stick mirrors and NOT gyro/motion data, despite sitting at the same idle 0x80
-       baseline as the sticks (see usb-reverse-engineering.md for the full investigation):
-       these briefly shift away from 0x80 for 1-2 report cycles after the host sends a
-       `02 11 00 14` status-query command, while the real stick bytes [2..5] stay pinned at
-       rest throughout, and their magnitude has zero correlation with actual controller
-       movement. Purpose unknown - harmless to ignore.
-[16] = Left trigger analog  - 0x00 released, 0xFF full pull
-[17] = Right trigger analog - 0x00 released, 0xFF full pull
+[12..20]
+     = the firmware's PROCESSED input block ("keyevent" in iControl's own source, vs the raw
+       "keyevent_raw" at [2..11]): [12]=LX' [13]=LY' [14]=RX' [15]=RY' [16]=LT' [17]=RT'
+       [18..20]=button bytes, after the controller applies its on-board mappings - stick
+       curves/deadzones, button remaps, and motion-sensing (gyro) mixing. Normally tracks the
+       raw bytes nearly 1:1 (which is why [16]/[17] were long documented as "the" analog
+       triggers), but diverges when an on-board mapping is active: gyro-as-stick mixes gyro
+       into [14]/[15] (or [12]/[13]), and gyro Button-mode gestures set bits in [18]/[19]
+       without touching raw [9]/[31] (see usb-reverse-engineering.md's Button mode section and
+       docs/config-protocol.md's feeling_map_type). Identified from iControl's own parser:
+       raw block = report bytes [2..11], processed block = [12..20], confirmed live by writing
+       feeling_map_type=1 and watching gyro drive [14]/[15] while [4]/[5] stayed still.
+[21..32]
+     = per-module data for the 4 swappable modules ("keyevent_ext"): 3 bytes each -
+       [21..23]=module0 X,Y,buttons; [24..26]=module1; [27..29]=module2; [30..32]=module3.
+       This is why these bytes track the sticks: the stick modules report their own X/Y here.
+[31] = (within module3's slot above) also observed repeating A/B/X/Y as 0x01/0x02/0x04/0x08 -
+       the face-button module's button byte.
+[16] = Left trigger analog (processed)  - 0x00 released, 0xFF full pull
+[17] = Right trigger analog (processed) - 0x00 released, 0xFF full pull
+[33..34]
+     = tracks RX/RY alongside [4..5] and [14..15]; not covered by iControl's parsed structs
+       (its keyevent_ext parsing stops at [32]). Exact identity unconfirmed - possibly a
+       fifth module slot's X/Y.
+[36] = additional mirror byte (button data in an alternate encoding), same family as the
+       module bytes above.
 [rest] = 0x00/0x80 at rest, unused
 ```
 
