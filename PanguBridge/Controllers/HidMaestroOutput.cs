@@ -53,7 +53,6 @@ public sealed class HidMaestroOutput : IDisposable
     private GamepadState  _lastState;
     private CancellationTokenSource? _loopCts;
     private Thread?        _submitThread;
-    private ManualResetEvent? _stopEvent;
 
     // One touchpad-state snapshot shared by both SubmitState and SubmitRawReport for a given
     // tick, matching PadForge's own pattern of sourcing both calls from a single TouchpadState
@@ -135,6 +134,16 @@ public sealed class HidMaestroOutput : IDisposable
     /// mutating this one in place, since a reference swap is atomic but concurrent in-place
     /// edits are not.</summary>
     public Dictionary<HmSourceButton, HmOutputButton> ButtonMap { get; set; } = HmMapping.CreateDefault();
+
+    // Raw trigger-effect bytes and their decoded result from the previous OnOutputDecoded call,
+    // per side - see DecodeTriggerEffectCached. Games/Steam routinely resend an unchanged effect
+    // on every rumble refresh, and TriggerEffectSample.Decode allocates on every call, so this
+    // skips the decode (and its allocations) entirely when the bytes are byte-for-byte identical
+    // to last time, which is the common case while a single effect is held.
+    private byte[]? _lastRawRightTriggerEffect;
+    private byte[]? _lastRawLeftTriggerEffect;
+    private TriggerEffectSample _lastDecodedRightTriggerEffect = TriggerEffectSample.Off;
+    private TriggerEffectSample _lastDecodedLeftTriggerEffect = TriggerEffectSample.Off;
 
     // Fired with (rightMotor, leftMotor) each time Steam/game sends Report 0x02 rumble output.
     public event Action<byte, byte>? RumbleChanged;
@@ -225,7 +234,6 @@ public sealed class HidMaestroOutput : IDisposable
             _ctrl.SubmitRawReport(BuildReport(_lastState, initialActive, initialTouch));
 
             _loopCts   = new CancellationTokenSource();
-            _stopEvent = new ManualResetEvent(false);
             _submitThread = new Thread(() => SubmitThreadProc(_loopCts.Token))
             {
                 Name       = "PanguBridge.HidMaestroSubmit",
@@ -267,30 +275,12 @@ public sealed class HidMaestroOutput : IDisposable
     /// </summary>
     private void SubmitThreadProc(CancellationToken ct)
     {
-        bool   periodRaised = false;
-        IntPtr timerHandle  = IntPtr.Zero;
-        try
-        {
-            periodRaised = NativeTiming.timeBeginPeriod(1) == 0;
-
-            timerHandle = NativeTiming.CreateWaitableTimerExW(
-                IntPtr.Zero, null,
-                NativeTiming.CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
-                NativeTiming.TIMER_ALL_ACCESS);
-
-            IntPtr[]? waitHandles = null;
-            if (timerHandle != IntPtr.Zero && _stopEvent != null)
-                waitHandles = new[] { _stopEvent.SafeWaitHandle.DangerousGetHandle(), timerHandle };
-
-            long freq    = Stopwatch.Frequency;
-            long nextTick = Stopwatch.GetTimestamp();
-
-            while (!ct.IsCancellationRequested)
+        NativeTiming.RunPrecisionLoop(ct,
+            // Re-read every tick (not cached once before the loop) so a live change to
+            // SubmitRateHz from the UI takes effect on the very next tick, no thread restart.
+            intervalTicksProvider: () => Stopwatch.Frequency / SubmitRateHz,
+            tick: () =>
             {
-                if (_ctrl == null) break;
-                // Re-read every tick (not cached once before the loop) so a live change to
-                // SubmitRateHz from the UI takes effect on the very next tick, no thread restart.
-                long intervalTicks = freq / SubmitRateHz;
                 try
                 {
                     // Snapshot _lastState ONCE per tick - it's written from a different
@@ -315,85 +305,11 @@ public sealed class HidMaestroOutput : IDisposable
                     // briefly wins the write race against SubmitRawReport and produces phantom
                     // touchpad taps at the origin. BuildHmState is kept for reference but not
                     // called.
-                    _ctrl.SubmitRawReport(BuildReport(state, active, touch));
+                    _ctrl?.SubmitRawReport(BuildReport(state, active, touch));
                 }
                 catch { /* best-effort - one dropped frame isn't worth surfacing */ }
-
-                // Schedule against an absolute timeline (nextTick += interval) rather than
-                // "sleep(interval) after work completes" - the latter accumulates drift equal
-                // to however long each tick's work took. If we're already past the deadline
-                // (a long GC pause, system hiccup), resync to now instead of trying to catch
-                // up with a burst of back-to-back submissions.
-                nextTick += intervalTicks;
-                long now = Stopwatch.GetTimestamp();
-                if (now >= nextTick) { nextTick = now; continue; }
-
-                double remainingMs = (nextTick - now) * 1000.0 / freq;
-
-                if (waitHandles != null && remainingMs > 1.5)
-                {
-                    long dueTime100ns = -(long)((remainingMs - 1.0) * 10_000); // negative = relative
-                    if (NativeTiming.SetWaitableTimer(timerHandle, ref dueTime100ns, 0, IntPtr.Zero, IntPtr.Zero, false))
-                    {
-                        uint waitResult = NativeTiming.WaitForMultipleObjects(
-                            (uint)waitHandles.Length, waitHandles, false, NativeTiming.INFINITE);
-                        if (waitResult == NativeTiming.WAIT_OBJECT_0) return; // stop signaled
-                    }
-                }
-                else if (waitHandles == null && remainingMs > 1.5)
-                {
-                    // No high-resolution timer available (pre-1803 Windows) - fall back to
-                    // Thread.Sleep, still tightened to ~1 ms by timeBeginPeriod(1) above.
-                    if (ct.WaitHandle.WaitOne((int)(remainingMs - 1.0))) return;
-                }
-
-                // Final close-out: spin the last sub-millisecond to cover both HR-timer
-                // overshoot and (when no HR timer exists) the whole remaining wait.
-                while (Stopwatch.GetTimestamp() < nextTick)
-                {
-                    if (ct.IsCancellationRequested) return;
-                    Thread.SpinWait(50);
-                }
-            }
-        }
-        finally
-        {
-            if (timerHandle != IntPtr.Zero) NativeTiming.CloseHandle(timerHandle);
-            if (periodRaised) NativeTiming.timeEndPeriod(1);
-        }
-    }
-
-    /// <summary>Win32 interop for precise submit-loop timing - see SubmitThreadProc.</summary>
-    private static class NativeTiming
-    {
-        public const uint CREATE_WAITABLE_TIMER_HIGH_RESOLUTION = 0x00000002;
-        public const uint TIMER_ALL_ACCESS = 0x1F0003;
-        public const uint WAIT_OBJECT_0    = 0x00000000;
-        public const uint INFINITE         = 0xFFFFFFFF;
-
-        [DllImport("winmm.dll", ExactSpelling = true)]
-        public static extern uint timeBeginPeriod(uint uMilliseconds);
-
-        [DllImport("winmm.dll", ExactSpelling = true)]
-        public static extern uint timeEndPeriod(uint uMilliseconds);
-
-        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-        public static extern IntPtr CreateWaitableTimerExW(
-            IntPtr lpTimerAttributes, string? lpTimerName, uint dwFlags, uint dwDesiredAccess);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        public static extern bool SetWaitableTimer(
-            IntPtr hTimer, ref long pDueTime, int lPeriod,
-            IntPtr pfnCompletionRoutine, IntPtr lpArgToCompletionRoutine, bool fResume);
-
-        [DllImport("kernel32.dll")]
-        public static extern uint WaitForMultipleObjects(
-            uint nCount, IntPtr[] lpHandles, bool bWaitAll, uint dwMilliseconds);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        public static extern bool CloseHandle(IntPtr hObject);
+            },
+            shouldContinue: () => _ctrl != null);
     }
 
     // GamepadState field for a given remappable digital input - the read side of ButtonMap.
@@ -652,6 +568,23 @@ public sealed class HidMaestroOutput : IDisposable
         };
     }
 
+    // See _lastRawRightTriggerEffect/_lastRawLeftTriggerEffect's doc comment. lastRaw is updated
+    // in place to a copy of the array just decoded (or left alone if this call reused the cached
+    // result) so the next call's comparison is always against the most recently seen bytes.
+    // Clones rather than storing `raw` itself - HMOutputDecodedEventArgs.Fields' array lifetime
+    // isn't documented, and if HIDMaestro ever reused the same underlying buffer across
+    // callbacks, holding a reference to it (instead of a copy) would make this comparison always
+    // trivially true against itself, silently breaking effect-change detection instead of just
+    // costing a redundant decode.
+    private static TriggerEffectSample DecodeTriggerEffectCached(byte[] raw, ref byte[]? lastRaw, ref TriggerEffectSample lastDecoded)
+    {
+        if (lastRaw is not null && raw.AsSpan().SequenceEqual(lastRaw)) return lastDecoded;
+
+        lastDecoded = TriggerEffectSample.Decode(raw);
+        lastRaw = (byte[])raw.Clone();
+        return lastDecoded;
+    }
+
     private void OnOutputDecoded(object? sender, HMOutputDecodedEventArgs e)
     {
         if (e.Fields.TryGetValue("leftMotor",  out var lObj) && lObj  is byte leftMotor
@@ -677,8 +610,8 @@ public sealed class HidMaestroOutput : IDisposable
             if (rightValid || leftValid)
             {
                 AdaptiveTriggerChanged?.Invoke(
-                    rightValid ? TriggerEffectSample.Decode(rEffBytes) : null,
-                    leftValid  ? TriggerEffectSample.Decode(lEffBytes) : null);
+                    rightValid ? DecodeTriggerEffectCached(rEffBytes, ref _lastRawRightTriggerEffect, ref _lastDecodedRightTriggerEffect) : null,
+                    leftValid  ? DecodeTriggerEffectCached(lEffBytes, ref _lastRawLeftTriggerEffect,  ref _lastDecodedLeftTriggerEffect)  : null);
             }
         }
 
@@ -696,12 +629,9 @@ public sealed class HidMaestroOutput : IDisposable
 
     private void Cleanup()
     {
-        _loopCts?.Cancel();
-        _stopEvent?.Set(); // wakes SubmitThreadProc immediately if it's blocked in WaitForMultipleObjects
+        _loopCts?.Cancel(); // also wakes SubmitThreadProc immediately - see NativeTiming.RunPrecisionLoop
         _submitThread?.Join(TimeSpan.FromSeconds(1));
         _submitThread = null;
-        _stopEvent?.Dispose();
-        _stopEvent = null;
         _loopCts?.Dispose();
         _loopCts = null;
 

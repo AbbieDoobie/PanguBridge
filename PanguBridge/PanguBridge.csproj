@@ -32,4 +32,13 @@
     <Resource Include="Icon.ico" />
   </ItemGroup>
 
+  <!-- Bumps version.txt's patch number after every local build, then force-copies it into the
+       output directory directly rather than relying on the CopyToOutputDirectory None-item
+       above - that mechanism compares timestamps against its own incremental-build cache and
+       was found to lag one build behind when the bump happens in the same invocation. -->
+  <Target Name="BumpVersion" AfterTargets="Build">
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\bump-version.ps1&quot;" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\..\version.txt" DestinationFolder="$(TargetDir)" />
+  </Target>
+
 </Project>

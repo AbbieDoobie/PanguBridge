@@ -10,7 +10,11 @@ namespace PanguBridge;
 /// </summary>
 public static class AppVersion
 {
-    public static string Display => TryReadVersion() is string v ? $"v{v}" : "v?.?.?";
+    public static string Display => Raw is string v ? $"v{v}" : "v?.?.?";
+
+    /// <summary>Unprefixed Major.Minor.Patch (e.g. "0.4.54"), or null if version.txt is
+    /// missing/unreadable - used for update-check comparisons against GitHub release tags.</summary>
+    public static string? Raw => TryReadVersion();
 
     private static string? TryReadVersion()
     {

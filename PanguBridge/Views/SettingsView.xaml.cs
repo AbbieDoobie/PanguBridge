@@ -65,6 +65,11 @@ public partial class SettingsView : UserControl
         AdaptiveTriggerSimulationCheckBox.IsChecked = _settings.AdaptiveTriggerSimulation;
         AdaptiveTriggerIgnoreIntensityCheckBox.IsChecked = _settings.AdaptiveTriggerIgnoreIntensity;
         AdaptiveTriggerDisableMatchingGripCheckBox.IsChecked = _settings.AdaptiveTriggerDisableMatchingGrip;
+        AdaptiveTriggerIncludeGainLevelsCheckBox.IsChecked = _settings.AdaptiveTriggerIncludeGainLevels;
+        AdaptiveTriggerTimingOffsetSlider.Value = _settings.AdaptiveTriggerTimingOffsetPercent;
+        AdaptiveTriggerTimingOffsetValueText.Text = $"{_settings.AdaptiveTriggerTimingOffsetPercent:0}%";
+        AdaptiveTriggerReleaseSlider.Value = _settings.AdaptiveTriggerReleaseMs;
+        AdaptiveTriggerReleaseValueText.Text = $"{_settings.AdaptiveTriggerReleaseMs:0} ms";
 
         // Trigger Gain Mode lives on the controller itself, not in settings.json - reflects
         // whatever HidReader already knows (false until the first connect's query resolves),
@@ -129,6 +134,36 @@ public partial class SettingsView : UserControl
         _suppressEvents = true;
         AutostartCheckBox.IsChecked = Autostart.IsEnabled();
         _suppressEvents = false;
+    }
+
+    // Manual only - no automatic/background check runs anywhere in the app, and this never
+    // downloads anything itself, only offers to open the releases page in the user's browser.
+    private async void CheckForUpdateButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        CheckForUpdateButton.IsEnabled = false;
+        CheckForUpdateButton.Content = "Checking...";
+
+        var result = await UpdateChecker.CheckAsync();
+
+        CheckForUpdateButton.IsEnabled = true;
+        CheckForUpdateButton.Content = "Check for Update";
+
+        UpdateCheckDialog dialog = !result.Success
+            ? new UpdateCheckDialog(
+                "Could not check for updates. Check your internet connection and try again.",
+                AppVersion.Display, null,
+                "View GitHub", UpdateChecker.RepoUrl)
+            : result.UpdateAvailable
+                ? new UpdateCheckDialog(
+                    "A new version is available.",
+                    AppVersion.Display, $"v{result.LatestVersion}",
+                    "View Releases on GitHub", UpdateChecker.ReleasesPageUrl)
+                : new UpdateCheckDialog(
+                    "You're already on the latest version.",
+                    AppVersion.Display, $"v{result.LatestVersion}");
+
+        dialog.Owner = Window.GetWindow(this);
+        dialog.ShowDialog();
     }
 
     private void SwapTriggersCheckBox_OnChanged(object sender, RoutedEventArgs e)
@@ -473,6 +508,34 @@ public partial class SettingsView : UserControl
     {
         if (_suppressEvents) return;
         _settings.AdaptiveTriggerDisableMatchingGrip = AdaptiveTriggerDisableMatchingGripCheckBox.IsChecked == true;
+        _settings.Save();
+        _engine.RefreshRumbleSettings();
+    }
+
+    private void AdaptiveTriggerIncludeGainLevelsCheckBox_OnChanged(object sender, RoutedEventArgs e)
+    {
+        if (_suppressEvents) return;
+        _settings.AdaptiveTriggerIncludeGainLevels = AdaptiveTriggerIncludeGainLevelsCheckBox.IsChecked == true;
+        _settings.Save();
+        _engine.RefreshRumbleSettings();
+    }
+
+    private void AdaptiveTriggerTimingOffsetSlider_OnValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (AdaptiveTriggerTimingOffsetValueText is null) return;
+        AdaptiveTriggerTimingOffsetValueText.Text = $"{e.NewValue:0}%";
+        if (_suppressEvents) return;
+        _settings.AdaptiveTriggerTimingOffsetPercent = (int)e.NewValue;
+        _settings.Save();
+        _engine.RefreshRumbleSettings();
+    }
+
+    private void AdaptiveTriggerReleaseSlider_OnValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (AdaptiveTriggerReleaseValueText is null) return;
+        AdaptiveTriggerReleaseValueText.Text = $"{e.NewValue:0} ms";
+        if (_suppressEvents) return;
+        _settings.AdaptiveTriggerReleaseMs = e.NewValue;
         _settings.Save();
         _engine.RefreshRumbleSettings();
     }

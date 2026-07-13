@@ -246,6 +246,41 @@ public sealed class AppSettings
     /// out of the box.</summary>
     public bool AdaptiveTriggerDisableMatchingGrip { get; set; } = true;
 
+    /// <summary>When on, Adaptive Trigger Simulation's self-oscillating effects (Vibration/
+    /// Machine/Galloping - see TriggerEffectSample.IsSelfOscillating) are scaled to an 8-tier
+    /// felt-magnitude scale instead of the plain 0-4 one: 0, 1, 2, 3, 4, 2(Gain), 3(Gain),
+    /// 4(Gain) - tiers 5-7 reuse Trigger Gain Mode's bit as three extra tiers above what level 4
+    /// alone can reach, toggled per gate-loop tick (see HidReader.TrySendMotors's gainOverride
+    /// parameter) without touching the user's own persisted Trigger Gain Mode setting. Static
+    /// effects (Off/Feedback/Weapon/Bow) are unaffected regardless of this setting. Off by
+    /// default since it's an approximation on top of an approximation - the game's own
+    /// authored amplitude gets remapped onto a scale it was never designed for.</summary>
+    public bool AdaptiveTriggerIncludeGainLevels { get; set; } = false;
+
+    /// <summary>Shifts the physical pull position used to evaluate Adaptive Trigger's ForceAt
+    /// lookup, in percent of the trigger's full 0-255 range (-20 to 20). The Pangu has no
+    /// physical resistance to slow the trigger down the way a real DualSense would, so the buzz
+    /// can otherwise fire noticeably before the in-game action it represents - a positive value
+    /// delays the buzz further into the pull to compensate; negative brings it earlier. Applied
+    /// uniformly to every effect mode since they all resolve through the same ForceAt(position)
+    /// call - see PanguEngine.ApplyRumbleOutput. Only has an effect while
+    /// AdaptiveTriggerSimulation is on. Default: 5%.</summary>
+    public int AdaptiveTriggerTimingOffsetPercent { get; set; } = 5;
+
+    /// <summary>How long Adaptive Trigger buzz takes to fade after ForceAt's computed force
+    /// drops, in milliseconds (0-300). Attack (a rise in force) is always instant - only the
+    /// release/fade-out is eased. Without this, a fast single-shot pull-and-release can carry
+    /// the trigger through a static effect's force zone (Off/Feedback/Weapon/Bow) in less time
+    /// than one ~16ms gate-loop tick, producing barely a blip; easing the release gives it a
+    /// felt tail instead. Only applies to those static/position-only modes -
+    /// TriggerEffectSample.IsSelfOscillating effects (Vibration/Machine/Galloping) already vary
+    /// over time on their own for as long as they're held, so this is bypassed for them
+    /// entirely rather than risk blurring their own oscillation (see
+    /// PanguEngine.ApplyAdaptiveTriggerRelease's allowRelease parameter). 0 disables this -
+    /// snaps to ForceAt's raw value every tick, the prior behavior. Only has an effect while
+    /// AdaptiveTriggerSimulation is on. Default: 40ms.</summary>
+    public double AdaptiveTriggerReleaseMs { get; set; } = 40.0;
+
     /// <summary>Physical button -> vJoy button slot (1-19), or null to decode but not send to
     /// vJoy. Used only by the vJoy (Legacy) backend's Button Mapping tab (MappingEditor); the
     /// HIDMaestro/DualSense Edge path has fixed semantic button positions and ignores this

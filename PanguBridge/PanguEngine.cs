@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using PanguBridge.Controllers;
 using PanguBridge.Mapping;
@@ -45,6 +46,9 @@ public sealed class PanguEngine : IDisposable
     private int  _lastSentGripRight = -1;
     private int  _lastSentTrigLeft = -1;
     private int  _lastSentTrigRight = -1;
+    // AppSettings.AdaptiveTriggerIncludeGainLevels - see gainOverride's declaration in
+    // ApplyRumbleOutput.
+    private bool? _lastSentGainOverride;
 
     // Last time TrySendMotors was actually called with a nonzero motor active - see the
     // periodic-refresh comment at the send site. DateTime.MinValue forces an immediate first
@@ -58,6 +62,49 @@ public sealed class PanguEngine : IDisposable
     // carrying trigger-effect bytes arrives, matching TriggerEffectSample's own Off default.
     private TriggerEffectSample _lastLeftTriggerEffect = TriggerEffectSample.Off;
     private TriggerEffectSample _lastRightTriggerEffect = TriggerEffectSample.Off;
+
+    // Stopwatch.GetTimestamp() of when each side's current effect started - fed into
+    // ForceAt's elapsedSeconds so Vibration/Machine/Galloping's oscillation runs on a
+    // continuous clock. Reset only in OnAdaptiveTriggerChanged when the incoming effect is
+    // genuinely different (TriggerEffectSample.IsSameEffectAs) from the cached one - games
+    // routinely resend an unchanged effect on every rumble refresh (confirmed via live
+    // capture), and restarting the phase on every resend would stutter the oscillation instead
+    // of letting it run smoothly.
+    private long _leftEffectStartTicks;
+    private long _rightEffectStartTicks;
+
+    // AppSettings.AdaptiveTriggerReleaseMs - per-side force carried across gate-loop ticks so a
+    // drop in ForceAt's raw result can be eased instead of snapping straight to the new value.
+    // Attack (a rise) is never eased - only ApplyAdaptiveTriggerRelease's release direction uses
+    // these as state. Bypassed entirely for self-oscillating effects - see
+    // TriggerEffectSample.IsSelfOscillating and ApplyAdaptiveTriggerRelease's allowRelease
+    // parameter.
+    private double _leftAdaptiveTriggerForce;
+    private double _rightAdaptiveTriggerForce;
+
+    // Stopwatch.GetTimestamp() of the previous ApplyRumbleOutput call, used to measure the real
+    // elapsed time between calls for ApplyAdaptiveTriggerRelease's release-envelope math - see
+    // that method's doc comment for why a fixed tick assumption doesn't hold once RumbleGateLoop
+    // varies its own interval (3ms vs 16ms) based on the other trigger's effect.
+    private long _lastRumbleTickTimestamp;
+
+    // The effect (post-swap, i.e. physical-side) that fed the release calculation last tick -
+    // compared against this tick's to force an instant snap whenever it's genuinely different,
+    // regardless of magnitude. Without this, a new effect whose own peak happens to be lower
+    // than what the previous effect's release was still coasting down from would get blended
+    // into that leftover tail instead of being heard cleanly at its own value - release smoothing
+    // is only meant to ease a continuing effect's own drop, never to soften a new command.
+    private TriggerEffectSample _leftAppliedEffect = TriggerEffectSample.Off;
+    private TriggerEffectSample _rightAppliedEffect = TriggerEffectSample.Off;
+
+    // Raw physical trigger position (pre timing-offset) from the previous ApplyRumbleOutput
+    // call, per physical side - fed into TriggerEffectSample.ForceAt's fromPosition alongside
+    // this tick's position, so a fast pull/release that crosses an effect's zone between two
+    // ~16ms gate-loop samples still registers instead of silently missing it (confirmed via live
+    // capture - see docs/rumble.md). 0 on the very first tick is harmless: it just means the
+    // first-ever evaluation sweeps from a resting position, which is what actually happened.
+    private byte _lastLeftTriggerPosition;
+    private byte _lastRightTriggerPosition;
 
     // Only exists while RumbleMode is one of the two "if pulled" modes - see
     // EnsureRumbleGateLoopRunning. Reacts to physical trigger pull/release between Steam
@@ -207,8 +254,16 @@ public sealed class PanguEngine : IDisposable
     // than overwriting a live effect with stale/zeroed bytes from an unrelated write.
     private void OnAdaptiveTriggerChanged(TriggerEffectSample? rightEffect, TriggerEffectSample? leftEffect)
     {
-        if (rightEffect.HasValue) _lastRightTriggerEffect = rightEffect.Value;
-        if (leftEffect.HasValue) _lastLeftTriggerEffect = leftEffect.Value;
+        if (rightEffect.HasValue && !rightEffect.Value.IsSameEffectAs(_lastRightTriggerEffect))
+        {
+            _lastRightTriggerEffect = rightEffect.Value;
+            _rightEffectStartTicks = Stopwatch.GetTimestamp();
+        }
+        if (leftEffect.HasValue && !leftEffect.Value.IsSameEffectAs(_lastLeftTriggerEffect))
+        {
+            _lastLeftTriggerEffect = leftEffect.Value;
+            _leftEffectStartTicks = Stopwatch.GetTimestamp();
+        }
 
         if (NeedsGateLoop())
             EnsureRumbleGateLoopRunning();
@@ -228,6 +283,13 @@ public sealed class PanguEngine : IDisposable
     private bool NeedsGateLoop() =>
         IsGatedRumbleMode(_settings.RumbleMode) || _settings.AdaptiveTriggerSimulation
             || _settings.AudioAutoHapticsEnabled;
+
+    // See RumbleGateLoop's fast-tick comment. _lastLeftTriggerEffect/_lastRightTriggerEffect are
+    // written from a different thread (OnAdaptiveTriggerChanged) with no lock, same as
+    // everywhere else in this class that reads them - not a new risk introduced here.
+    private bool IsSelfOscillatingAdaptiveTriggerActive() =>
+        _settings.AdaptiveTriggerSimulation
+        && (_lastLeftTriggerEffect.IsSelfOscillating || _lastRightTriggerEffect.IsSelfOscillating);
 
     /// <summary>Called by the Options UI right after changing RumbleMode or an intensity cap,
     /// so the change is felt immediately instead of waiting for the next Steam rumble packet.</summary>
@@ -316,21 +378,31 @@ public sealed class PanguEngine : IDisposable
         _rumbleGateThread = null; // the loop's own thread exits on its own via the token check
     }
 
-    // ~60 Hz: fast enough that a trigger pull/release (or an adaptive-trigger effect's force
-    // curve) feels immediate, far below anything that would meaningfully load a CPU core.
-    // Self-terminates the moment neither a gated RumbleMode nor adaptive-trigger simulation
-    // is active, so it never runs when it isn't needed.
+    // ~60 Hz baseline: fast enough that a trigger pull/release feels immediate, far below
+    // anything that would meaningfully load a CPU core. Self-terminates the moment neither a
+    // gated RumbleMode nor adaptive-trigger simulation is active, so it never runs when it
+    // isn't needed.
+    //
+    // Drops to a much tighter ~3ms tick (via the same high-resolution waitable timer
+    // HidMaestroOutput.SubmitThreadProc already uses, see NativeTiming) whenever a
+    // self-oscillating Adaptive Trigger effect (Vibration/Machine/Galloping) is currently
+    // active. Confirmed via live capture that a 12Hz effect sampled at the old fixed ~16ms
+    // (with real-world scheduling jitter on top) only got ~3-4 samples per cycle landing at
+    // effectively random phase points - the underlying sine is mathematically clean the whole
+    // time, but that sparse/uneven sampling made the felt rhythm read as jittery/inconsistent
+    // rather than smooth. The tighter tick fixed this in testing. Falls back to the normal
+    // ~16ms cadence the moment no self-oscillating effect is active, so this doesn't burn
+    // CPU/HID bandwidth otherwise.
+    private const int RumbleGateNormalIntervalMs = 16;
+    private const int RumbleGateFastIntervalMs = 3;
+
     private void RumbleGateLoop(CancellationToken token)
     {
-        while (!token.IsCancellationRequested)
-        {
-            if (!NeedsGateLoop()) break;
-
-            ApplyRumbleOutput();
-
-            try { Thread.Sleep(16); }
-            catch { break; }
-        }
+        NativeTiming.RunPrecisionLoop(token,
+            intervalTicksProvider: () => Stopwatch.Frequency *
+                (IsSelfOscillatingAdaptiveTriggerActive() ? RumbleGateFastIntervalMs : RumbleGateNormalIntervalMs) / 1000,
+            tick: ApplyRumbleOutput,
+            shouldContinue: NeedsGateLoop);
 
         _rumbleGateThread = null;
         _rumbleGateCts = null;
@@ -346,6 +418,14 @@ public sealed class PanguEngine : IDisposable
     {
         lock (_rumbleLock)
         {
+            // Real elapsed time since the last call, not an assumed fixed interval - see
+            // ApplyAdaptiveTriggerRelease's doc comment. Falls back to the nominal ~16ms cadence
+            // on the very first call, when there's no previous timestamp to measure from.
+            double tickMs = _lastRumbleTickTimestamp == 0
+                ? RumbleGateLoopTickMs
+                : (Stopwatch.GetTimestamp() - _lastRumbleTickTimestamp) * 1000.0 / Stopwatch.Frequency;
+            _lastRumbleTickTimestamp = Stopwatch.GetTimestamp();
+
             byte rawLeftGrip = _lastLeftMotor;
             byte rawRightGrip = _lastRightMotor;
 
@@ -355,6 +435,13 @@ public sealed class PanguEngine : IDisposable
 
             byte gripLeft = 0, gripRight = 0;
             int trigLeft = 0, trigRight = 0;
+
+            // AppSettings.AdaptiveTriggerIncludeGainLevels - Trigger Gain Mode toggled per-tick
+            // as an extra amplitude tier for self-oscillating Adaptive Trigger effects (see
+            // ScaleToTriggerLevelWithGain). null = don't touch the persisted/user Trigger Gain
+            // Mode setting - only set below, and only while the setting is on and a
+            // self-oscillating effect is active.
+            bool? gainOverride = null;
 
             // Whether RumbleMode makes a given motor eligible to vibrate at all right now - not
             // just a static per-mode category, since the "IfPulled" modes gate trigger
@@ -452,19 +539,80 @@ public sealed class PanguEngine : IDisposable
             {
                 var leftPhysicalEffect  = _settings.SwapTriggers ? _lastRightTriggerEffect : _lastLeftTriggerEffect;
                 var rightPhysicalEffect = _settings.SwapTriggers ? _lastLeftTriggerEffect  : _lastRightTriggerEffect;
-                trigLeft  = ScaleToTriggerLevel(leftPhysicalEffect.ForceAt(state.LeftTrigger));
-                trigRight = ScaleToTriggerLevel(rightPhysicalEffect.ForceAt(state.RightTrigger));
+                long leftEffectStartTicks  = _settings.SwapTriggers ? _rightEffectStartTicks : _leftEffectStartTicks;
+                long rightEffectStartTicks = _settings.SwapTriggers ? _leftEffectStartTicks  : _rightEffectStartTicks;
+
+                // Sweeps from the previous tick's raw position to this tick's, not just a single
+                // point lookup - see TriggerEffectSample.ForceAt's doc comment for why: a fast
+                // pull/release can cross a narrow zone entirely between two ~16ms gate-loop
+                // samples, and only checking the latest position can miss it completely even
+                // though the trigger genuinely passed through the zone.
+                byte leftFromLookup  = ApplyTimingOffset(_lastLeftTriggerPosition, _settings.AdaptiveTriggerTimingOffsetPercent);
+                byte leftToLookup    = ApplyTimingOffset(state.LeftTrigger, _settings.AdaptiveTriggerTimingOffsetPercent);
+                byte rightFromLookup = ApplyTimingOffset(_lastRightTriggerPosition, _settings.AdaptiveTriggerTimingOffsetPercent);
+                byte rightToLookup   = ApplyTimingOffset(state.RightTrigger, _settings.AdaptiveTriggerTimingOffsetPercent);
+                double leftElapsedSeconds  = ElapsedSecondsSince(leftEffectStartTicks);
+                double rightElapsedSeconds = ElapsedSecondsSince(rightEffectStartTicks);
+
+                byte leftRawForce  = leftPhysicalEffect.ForceAt(leftFromLookup, leftToLookup, leftElapsedSeconds);
+                byte rightRawForce = rightPhysicalEffect.ForceAt(rightFromLookup, rightToLookup, rightElapsedSeconds);
+
+                _lastLeftTriggerPosition  = state.LeftTrigger;
+                _lastRightTriggerPosition = state.RightTrigger;
+
+                bool leftEffectJustChanged  = !leftPhysicalEffect.IsSameEffectAs(_leftAppliedEffect);
+                bool rightEffectJustChanged = !rightPhysicalEffect.IsSameEffectAs(_rightAppliedEffect);
+                _leftAppliedEffect  = leftPhysicalEffect;
+                _rightAppliedEffect = rightPhysicalEffect;
+
+                byte leftForce  = ApplyAdaptiveTriggerRelease(ref _leftAdaptiveTriggerForce, leftRawForce,
+                    _settings.AdaptiveTriggerReleaseMs, allowRelease: !leftPhysicalEffect.IsSelfOscillating,
+                    forceInstant: leftEffectJustChanged, tickMs);
+                byte rightForce = ApplyAdaptiveTriggerRelease(ref _rightAdaptiveTriggerForce, rightRawForce,
+                    _settings.AdaptiveTriggerReleaseMs, allowRelease: !rightPhysicalEffect.IsSelfOscillating,
+                    forceInstant: rightEffectJustChanged, tickMs);
+
+                // AppSettings.AdaptiveTriggerIncludeGainLevels: self-oscillating effects (per
+                // TriggerEffectSample.IsSelfOscillating) use the 8-tier gain-extended scale
+                // instead of the plain 0-4 one when this is on; static effects are always the
+                // plain scale regardless. gainOverride is a single global bit shared by both
+                // physical triggers (see HidReader.TrySendMotors), so a side that isn't
+                // currently self-oscillating (or when the setting is off) contributes false -
+                // a genuine conflict (both sides self-oscillating and wanting different gain
+                // states at the same instant) resolves by OR, so whichever side wanted gain off
+                // ends up buzzing louder than it asked for on that tick.
+                if (_settings.AdaptiveTriggerIncludeGainLevels)
+                {
+                    bool leftWantsGain = false, rightWantsGain = false;
+                    if (leftPhysicalEffect.IsSelfOscillating)
+                        (trigLeft, leftWantsGain) = ScaleToTriggerLevelWithGain(leftForce);
+                    else
+                        trigLeft = ScaleToTriggerLevel(leftForce);
+                    if (rightPhysicalEffect.IsSelfOscillating)
+                        (trigRight, rightWantsGain) = ScaleToTriggerLevelWithGain(rightForce);
+                    else
+                        trigRight = ScaleToTriggerLevel(rightForce);
+
+                    if (leftPhysicalEffect.IsSelfOscillating || rightPhysicalEffect.IsSelfOscillating)
+                        gainOverride = leftWantsGain || rightWantsGain;
+                }
+                else
+                {
+                    trigLeft  = ScaleToTriggerLevel(leftForce);
+                    trigRight = ScaleToTriggerLevel(rightForce);
+                }
 
                 // Opt-in workaround (AppSettings.AdaptiveTriggerDisableMatchingGrip) for a
                 // confirmed device-side issue where a side's grip motor can interfere with
                 // that same side's Adaptive Trigger buzz - see the setting's doc comment and
-                // docs/rumble.md for the diagnosis. Suppressing that side's grip whenever its
-                // trigger is meant to be actively buzzing sidesteps it entirely; the opposite
-                // side's grip is unaffected.
+                // docs/rumble.md for the diagnosis. Gated on ZoneContainsSweep (position only),
+                // not trigLeft/trigRight - see that method's doc comment for why: gating on the
+                // instantaneous force let grip flicker back on every time a self-oscillating
+                // effect's sine dipped near zero, which was enough to audibly cut the buzz.
                 if (_settings.AdaptiveTriggerDisableMatchingGrip)
                 {
-                    if (trigLeft > 0) gripLeft = 0;
-                    if (trigRight > 0) gripRight = 0;
+                    if (leftPhysicalEffect.ZoneContainsSweep(leftFromLookup, leftToLookup)) gripLeft = 0;
+                    if (rightPhysicalEffect.ZoneContainsSweep(rightFromLookup, rightToLookup)) gripRight = 0;
                 }
             }
 
@@ -496,13 +644,15 @@ public sealed class PanguEngine : IDisposable
             // MotorRefreshInterval forces a resend on that cadence whenever any motor is meant
             // to be active, even with nothing to report as "changed".
             bool valuesChanged = gripLeft != _lastSentGripLeft || gripRight != _lastSentGripRight ||
-                trigLeft != _lastSentTrigLeft || trigRight != _lastSentTrigRight;
+                trigLeft != _lastSentTrigLeft || trigRight != _lastSentTrigRight ||
+                gainOverride != _lastSentGainOverride; // see gainOverride's declaration above
             bool anyMotorActive = gripLeft > 0 || gripRight > 0 || trigLeft > 0 || trigRight > 0;
             bool refreshDue = anyMotorActive && DateTime.UtcNow - _lastMotorSendTime >= MotorRefreshInterval;
 
             if (valuesChanged || refreshDue)
             {
-                HidReader.TrySendMotors(gripLeft, gripRight, trigLeft, trigRight);
+                HidReader.TrySendMotors(gripLeft, gripRight, trigLeft, trigRight, gainOverride);
+                _lastSentGainOverride = gainOverride;
                 _lastSentGripLeft = gripLeft;
                 _lastSentGripRight = gripRight;
                 _lastSentTrigLeft = trigLeft;
@@ -517,6 +667,63 @@ public sealed class PanguEngine : IDisposable
     // docs/rumble.md), not continuous like grip.
     private static int ScaleToTriggerLevel(byte magnitude) =>
         magnitude == 0 ? 0 : Math.Clamp((magnitude * 4 + 254) / 255, 1, 4);
+
+    // AppSettings.AdaptiveTriggerIncludeGainLevels - an 8-tier felt-magnitude scale for
+    // self-oscillating Adaptive Trigger effects, extending the plain 0-4 scale with Trigger
+    // Gain Mode as three extra tiers above level 4 alone: 0, 1, 2, 3, 4, 2(Gain), 3(Gain),
+    // 4(Gain) - user-specified ordering. Tiers 5-7 map to levels 2-4 with gain on, skipping a
+    // "1(Gain)" tier entirely (not because it doesn't exist on the wire, just not part of this
+    // 8-step scale). See HidReader.TrySendMotors's gainOverride parameter.
+    private static (int level, bool gain) ScaleToTriggerLevelWithGain(byte magnitude)
+    {
+        if (magnitude == 0) return (0, false);
+        int tier = Math.Clamp((magnitude * 7 + 254) / 255, 1, 7);
+        return tier <= 4 ? (tier, false) : (tier - 3, true);
+    }
+
+    // AppSettings.AdaptiveTriggerTimingOffsetPercent - shifts the position ForceAt is evaluated
+    // at, in percent of the 0-255 trigger range, so the buzz can be tuned to line up with the
+    // in-game action it represents instead of always firing at the effect's raw start position.
+    private static byte ApplyTimingOffset(byte position, int offsetPercent) =>
+        (byte)Math.Clamp(position - offsetPercent * 255 / 100, 0, 255);
+
+    // Fallback tick length for ApplyRumbleOutput's very first call, before there's a previous
+    // timestamp to measure a real interval from - see _lastRumbleTickTimestamp.
+    private const double RumbleGateLoopTickMs = 16.0;
+
+    private static double ElapsedSecondsSince(long stopwatchTimestamp) =>
+        stopwatchTimestamp == 0 ? 0.0 : (Stopwatch.GetTimestamp() - stopwatchTimestamp) / (double)Stopwatch.Frequency;
+
+    // AppSettings.AdaptiveTriggerReleaseMs - attack (a rise in target) always snaps instantly;
+    // only a drop eases toward the new value, using the same exponential-envelope shape as
+    // AudioAutoHapticsCapture's own Attack/Release (see its OnDataAvailable), just evaluated
+    // once per gate-loop tick instead of once per audio sample. allowRelease is false for
+    // TriggerEffectSample.IsSelfOscillating effects (Vibration/Machine/Galloping) - they already
+    // vary over time on their own, so easing on top would mostly just blur the oscillation; see
+    // the IsSelfOscillating doc comment for why. forceInstant is true whenever the effect feeding
+    // this call just changed (see _leftAppliedEffect/_rightAppliedEffect) - a brand new command
+    // is never eased in behind a previous one's leftover release tail, even if its own peak
+    // happens to be lower than what that tail was still coasting down from. tickMs is the actual
+    // measured time since the previous call (see _lastRumbleTickTimestamp), not a fixed constant
+    // - RumbleGateLoop's interval varies between ~3ms and ~16ms depending on whether the *other*
+    // trigger has a self-oscillating effect active, so a call for this side can land anywhere in
+    // that range regardless of what this side itself is doing; using the real elapsed time keeps
+    // the release duration matching what the slider says regardless of the other side's state.
+    private static byte ApplyAdaptiveTriggerRelease(ref double decayedForce, byte target, double releaseMs,
+        bool allowRelease, bool forceInstant, double tickMs)
+    {
+        if (forceInstant || !allowRelease || target >= decayedForce || releaseMs <= 0)
+        {
+            decayedForce = target;
+        }
+        else
+        {
+            double releaseCoeff = 1.0 - Math.Exp(-tickMs / releaseMs);
+            decayedForce += (target - decayedForce) * releaseCoeff;
+        }
+
+        return (byte)Math.Clamp(decayedForce, 0, 255);
+    }
 
     // AudioAutoHapticsCapture no longer gates its own output (see its OnDataAvailable) since one
     // shared Left/Right intensity now feeds several motor groups, each with its own floor -

@@ -102,32 +102,88 @@ as the game/Steam sent them, the same as it does for `leftMotor`/`rightMotor` (g
 
 ### Effect byte layout
 
-The layout matches `Ohjurot/DualSense-Windows`'s `DS5_Output.cpp` (`processTrigger`), a widely
-used open-source reference PC games build against for this feature - this is a
-community-reverse-engineered protocol, not an official Sony specification. Byte 0 of each
-11-byte blob is a mode ID; the rest are mode-specific parameters. `AdaptiveTriggerEffect.cs`
-decodes three modes:
+Byte 0 of each 11-byte blob is a mode ID; the rest are mode-specific parameters. Mode IDs and
+every parameter layout are confirmed against `Nielk1/duaLib`'s `triggerFactory.cpp`/`.h`
+(github.com/WujekFoliarz/duaLib, MIT licensed, explicitly revision-numbered and
+parameter-validated) - the same source both PadForge's own DualSense encoder and `dualsensectl`
+independently trace back to. duaLib's own enum splits modes into two groups: "officially
+recognized" (documented, expected to keep working in future firmware) and "unofficial but
+unique effects left in the firmware" (undocumented; Galloping and Machine were specifically
+reverse-engineered from Metro Exodus's own HID traffic). Live capture against a real game
+(Steam Input off, so nothing translated the bytes) additionally confirmed Off/Bow/Weapon/
+Vibration byte-for-byte.
 
-- `0x00` Off - no resistance requested.
-- `0x01` Continuous - uniform force (`byte[2]`) starting at `byte[1]` and holding to full pull.
-- `0x02` Section - a binary "wall": full force between `byte[1]` (start) and `byte[2]` (end),
-  nothing outside that range.
-- `0x26` EffectEx - three-zone force curve. `byte[1]` is `0xFF - startPosition` (the encoder
-  stores it inverted); `byte[4]`/`byte[5]`/`byte[6]` are begin/middle/end force.
-  `TriggerEffectSample.ForceAt` blends between the three zones linearly - the real hardware's
-  exact interpolation isn't publicly documented, so this is an approximation on top of the
-  Pangu's own hardware limits.
-- Anything else (including `0xFC` Calibrate, and any multi-zone "Feedback"/"Weapon" mode this
-  decoder doesn't recognize) is treated as Off.
+An earlier version of this decoder was built against `Ohjurot/DualSense-Windows`'s
+`DS5_Output.cpp`, a different (and, per live capture, incorrect for real games) mode-ID scheme -
+that library's `0x00`/`0x01`/`0x02` IDs never actually appeared in captured traffic.
+
+`AdaptiveTriggerEffect.cs` decodes:
+
+- `0x05` Off - no resistance requested (distinct from an all-zero/never-written report, which
+  also decodes to Off).
+- `0x21` Feedback - per-zone strength (10 position zones spanning the full 0-255 pull range,
+  3-bit packed strength per zone meaning 1-8). Static, no time component.
+- `0x25` Weapon - a "wall": one flat strength across a start/end zone range. Static.
+- `0x22` Bow - a start/end zone range with a pull strength across it, plus a stronger "snap"
+  force placed on the end zone only (approximates the snap at full draw a real Bow effect has -
+  the Pangu can't reproduce an actual snap release). Static.
+- `0x26` Vibration - per-zone amplitude (same packing as Feedback) plus a frequency byte (Hz).
+  Genuinely time-varying: the trigger buzzes at that rate for as long as it's held past the
+  effect's position, rendered as a sine-modulated amplitude (0 to peak and back) - matches how
+  PadForge's own trigger-effect visualizer renders this mode.
+- `0x27` Machine - a start/end zone range, two alternating force levels (`amplitudeA`/
+  `amplitudeB`, raw 0-7 with *no* +1 offset - the one mode that differs from every other mode's
+  1-8-via-plus-one convention, confirmed by duaLib's own range check being `> 7` not `> 8`), a
+  frequency byte (Hz), and a period byte (alternation period between A and B, in *tenths of a
+  second* per duaLib's own doc comment). Rendered as a square-wave alternation between A and B
+  at the period's rate, with whichever is currently active further sine-modulated at the
+  frequency - two nested clocks, since duaLib documents the two parameters as controlling
+  different things ("resembles Vibration" for the buzz, "period of oscillation between A and B"
+  for the swing) without spelling out how they combine; this is `AdaptiveTriggerEffect.cs`'s own
+  synthesis of those two descriptions, not a documented formula.
+- `0x23` Galloping - a start/end zone range and two timing offsets (`firstFoot`/`secondFoot`,
+  0-6/1-7) marking phase positions within a cycle, plus a frequency byte (Hz) for the whole
+  cycle rate - modeling two hoofbeats per cycle. There is no amplitude parameter for this mode
+  at all; rendered as two brief, decaying pulses per cycle at a fixed/full assumed strength
+  (`GallopingPulseForce`), since the protocol carries no data to derive a magnitude from. The
+  decay window (`GallopingPulseDecayMs`, 80ms) is this decoder's own choice - it exists so a
+  beat lands reliably across the ~16ms gate-loop tick spacing rather than risking falling
+  between two samples.
+- Anything else (including `0xFC` Calibrate and its `0xFD`/`0xFE` neighbors) is treated as Off.
+
+`TriggerEffectSample.IsSelfOscillating` is true for Vibration/Machine/Galloping - see
+`AdaptiveTriggerReleaseMs` below for why that distinction matters.
 
 ### Live evaluation
 
 A game sends a new trigger-effect packet only when the effect changes, not on every trigger
 movement, so the resistance curve has to be re-evaluated continuously against the physical
-trigger's current position. `PanguEngine` caches the latest decoded `TriggerEffectSample` per
-side and re-evaluates `ForceAt(currentPosition)` on the same ~60 Hz rumble gate loop the
-`...IfPulled` RumbleModes use to react to physical trigger pull/release between Steam
-packets (`PanguEngine.RumbleGateLoop`), so the buzz tracks the pull in real time.
+trigger's current position (and, for the self-oscillating modes, elapsed time). `PanguEngine`
+caches the latest decoded `TriggerEffectSample` per side and re-evaluates `ForceAt` on the same
+~60 Hz rumble gate loop the `...IfPulled` RumbleModes use to react to physical trigger
+pull/release between Steam packets (`PanguEngine.RumbleGateLoop`), so the buzz tracks both the
+pull and, where relevant, the effect's own rhythm in real time.
+
+`ForceAt(fromPosition, toPosition, elapsedSeconds)` takes the whole position swept since the
+previous gate-loop tick, not just a single current-position lookup - confirmed via live capture
+to matter in practice: a fast trigger pull-and-release can cross an effect's zone (as narrow as
+~25 of the 255 positions) entirely within one ~16ms tick, so checking only the latest sampled
+position can miss a real, felt crossing altogether even though the trigger genuinely passed
+through the zone. `PanguEngine` tracks each physical side's previous raw position
+(`_lastLeftTriggerPosition`/`_lastRightTriggerPosition`) and feeds both endpoints through
+`AdaptiveTriggerTimingOffsetPercent` before the sweep.
+
+`elapsedSeconds` is time since the *current* effect started, tracked per side via
+`Stopwatch.GetTimestamp()` in `PanguEngine.OnAdaptiveTriggerChanged`. Games/Steam routinely
+resend an unchanged effect on every rumble refresh (confirmed via live capture) - naively
+resetting this timer on every notification would restart Vibration/Machine/Galloping's
+oscillation phase on every resend, producing an audible/tactile stutter instead of a smooth
+buzz. `TriggerEffectSample.IsSameEffectAs` (byte-for-byte comparison of the original 11-byte
+blob) gates the reset so it only happens on a genuine change. The same effect-identity check
+also forces `PanguEngine.ApplyAdaptiveTriggerRelease` to snap instantly whenever the *effect*
+feeding it just changed, regardless of magnitude - a brand new command is never eased in behind
+a previous one's leftover release tail, even if its own peak happens to be lower than what that
+tail was still coasting down from.
 
 ### Physical motor mapping
 
@@ -157,10 +213,63 @@ position (not the swapped/output position) - see `PanguEngine.ApplyRumbleOutput`
   buzz out, even though the bytes sent to the device never waver - most likely the same side's
   grip and trigger motors share a driver circuit that can't reliably sustain both
   independently. Cross-side combinations (e.g. left trigger + right grip) are unaffected. When
-  this setting is on, a side's grip motor is forced to 0 whenever Adaptive Trigger Simulation
-  is actively buzzing that same side's trigger; the opposite side's grip is unaffected, and
-  RumbleMode governs grip normally everywhere Adaptive Trigger Simulation isn't currently
-  claiming a side's trigger. Defaults on for the same reason as above.
+  this setting is on, a side's grip motor is forced to 0 whenever that side's trigger position
+  is within its Adaptive Trigger effect's active zone - gated via
+  `TriggerEffectSample.ZoneContainsSweep` (position only), not the effect's instantaneous
+  `ForceAt` result. That distinction matters for the self-oscillating modes (Vibration/Machine/
+  Galloping): gating on the instantaneous force meant a sine dip to zero (happening several
+  times a second by design, not a bug) briefly re-enabled grip mid-buzz, re-triggering the same
+  hardware conflict this setting exists to prevent and producing an audible/tactile hiccup
+  during otherwise-continuous automatic fire (confirmed via live capture). Gating on zone
+  presence instead keeps grip suppressed continuously through a self-oscillating effect's whole
+  hold. The opposite side's grip is unaffected, and RumbleMode governs grip normally everywhere
+  Adaptive Trigger Simulation isn't currently claiming a side's trigger zone. Defaults on for
+  the same reason as above.
+- `AppSettings.AdaptiveTriggerIncludeGainLevels` ("Include Trigger Gain Intensity Levels",
+  Advanced accordion, default off). Self-oscillating effects (Vibration/Machine/Galloping, per
+  `TriggerEffectSample.IsSelfOscillating`) are scaled to an 8-tier felt-magnitude scale instead
+  of the plain 0-4 one: 0, 1, 2, 3, 4, 2(Gain), 3(Gain), 4(Gain) -
+  `PanguEngine.ScaleToTriggerLevelWithGain`. Tiers 5-7 reuse Trigger Gain Mode's bit
+  (`HidReader`'s `TriggerGainBit`) as three extra tiers above what level 4 alone can reach,
+  toggled per gate-loop tick via `HidReader.TrySendMotors`'s `gainOverride` parameter -
+  confirmed via live testing to ride along on the config packet that's already resent every
+  tick during buzzing, so this adds no extra HID writes and doesn't touch the user's own
+  persisted Trigger Gain Mode setting/checkbox. The gain bit is a single value shared by both
+  physical triggers, not independently settable per side - if both are self-oscillating and
+  want different gain states at the same instant, they're OR-combined (whichever side wanted
+  gain off ends up buzzing louder than it asked for on that tick). Static effects
+  (Off/Feedback/Weapon/Bow) are unaffected regardless of this setting. Off by default since
+  it's an approximation on top of an approximation - the game's own authored amplitude gets
+  remapped onto a scale it was never designed for.
+- `AppSettings.AdaptiveTriggerTimingOffsetPercent` ("Adaptive Trigger Timing Offset", Advanced
+  accordion, -20 to 20, default 5%). The Pangu has no physical resistance to slow the trigger
+  down the way a real DualSense would - a player who'd have felt real resistance building
+  through a zone instead sails straight through it, so the buzz can fire noticeably before the
+  in-game action it's meant to represent. Shifts the position `ForceAt` is evaluated at (in
+  percent of the 0-255 range) to compensate: positive delays the buzz further into the pull,
+  negative brings it earlier. Applied uniformly ahead of every mode via
+  `PanguEngine.ApplyTimingOffset`, before `ForceAt` ever sees the position.
+- `AppSettings.AdaptiveTriggerReleaseMs` ("Adaptive Trigger Release Time", Advanced accordion,
+  0-300ms, default 40ms). Only applies to the static modes (Off/Feedback/Weapon/Bow) - a fast
+  single-shot pull-and-release can carry the trigger through one of those effects' force zones
+  in less time than one gate-loop tick, producing barely a felt blip; easing the release instead
+  of snapping straight to 0 gives it a felt tail. Bypassed entirely for
+  `TriggerEffectSample.IsSelfOscillating` effects (Vibration/Machine/Galloping) - they already
+  vary over time on their own for as long as they're held (real-world frequencies seen/
+  referenced - 15-33Hz - land well inside typical release-time windows), so smoothing on top
+  would mostly just blur their own oscillation rather than help. See
+  `PanguEngine.ApplyAdaptiveTriggerRelease`.
+
+### Gate loop sampling rate
+
+`PanguEngine.RumbleGateLoop` ticks at a dynamic rate rather than a fixed one: ~3ms (via the same
+high-resolution waitable timer `HidMaestroOutput.SubmitThreadProc` uses for submitting input
+state, see `NativeTiming`) whenever a self-oscillating effect is active on either side, falling
+back to the normal ~16ms otherwise. Confirmed via live capture that a 12Hz effect sampled at a
+fixed ~16ms (with real-world OS scheduling jitter on top) only got ~3-4 samples per cycle
+landing at effectively random phase points - the underlying sine is mathematically clean the
+whole time, but that sparse/uneven sampling made the felt rhythm read as jittery/inconsistent
+rather than smooth. The tighter tick fixed this in testing.
 
 ## Audio Auto Haptics
 

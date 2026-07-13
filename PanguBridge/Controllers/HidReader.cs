@@ -234,7 +234,19 @@ public sealed class HidReader : IDisposable
     /// from it when both a grip magnitude and that side's trigger fire are genuinely requested
     /// simultaneously (GripAndTrigger / GripAndTriggerIfPulled).
     /// </summary>
-    public bool TrySendMotors(byte gripLeft, byte gripRight, int triggerLeftLevel, int triggerRightLevel)
+    // AppSettings.AdaptiveTriggerIncludeGainLevels - Trigger Gain Mode toggled per-tick as an
+    // extra amplitude tier for self-oscillating Adaptive Trigger effects. Tracks the last
+    // gainOverride actually sent so a change in just this (with trigger levels otherwise
+    // unchanged) still forces a resend - see TrySendMotors.
+    private bool? _lastConfiguredGainOverride;
+
+    /// <summary>gainOverride, when non-null, temporarily flips Trigger Gain Mode's bit for this
+    /// write only, without touching the persisted _ledZoneFlags/TriggerGainMode the user's own
+    /// Options-tab checkbox controls - null leaves that persisted state as-is (the normal
+    /// path). See AppSettings.AdaptiveTriggerIncludeGainLevels and PanguEngine's
+    /// self-oscillating ATS handling.</summary>
+    public bool TrySendMotors(byte gripLeft, byte gripRight, int triggerLeftLevel, int triggerRightLevel,
+        bool? gainOverride = null)
     {
         var stream = _activeStream;
         if (stream is null) return false;
@@ -256,14 +268,17 @@ public sealed class HidReader : IDisposable
                 // ~10 Hz-max periodic refresh, InputTestView's 2.5 Hz-max test ramp) already
                 // throttle how often they call this method, so resending unconditionally here
                 // doesn't spam the device. Also resends whenever LED state changed since the
-                // last configure send - see SendConfigurePacket.
+                // last configure send, or gainOverride differs from what was last sent - see
+                // SendConfigurePacket.
                 bool configSent = triggerLeftLevel != _lastConfiguredTriggerLeft || triggerRightLevel != _lastConfiguredTriggerRight
-                    || triggerLeftLevel > 0 || triggerRightLevel > 0 || _ledPendingSend;
+                    || triggerLeftLevel > 0 || triggerRightLevel > 0 || _ledPendingSend
+                    || gainOverride != _lastConfiguredGainOverride;
                 if (configSent)
                 {
-                    SendConfigurePacket(stream, triggerLeftLevel, triggerRightLevel);
+                    SendConfigurePacket(stream, triggerLeftLevel, triggerRightLevel, gainOverride);
                     _lastConfiguredTriggerLeft = triggerLeftLevel;
                     _lastConfiguredTriggerRight = triggerRightLevel;
+                    _lastConfiguredGainOverride = gainOverride;
                 }
 
                 var report = new byte[_activeOutputLength];
@@ -286,7 +301,12 @@ public sealed class HidReader : IDisposable
     /// <summary>Sets the controller's LED color (0-255 per channel, standard R,G,B order -
     /// callers don't need to know the device's own B,G,R wire order, see SendConfigurePacket).
     /// Sends immediately, reusing whatever trigger level was last configured so this doesn't
-    /// disturb an in-progress trigger buzz - see docs/led.md.</summary>
+    /// disturb an in-progress trigger buzz - see docs/led.md. Also re-sends
+    /// _lastConfiguredGainOverride so this doesn't clobber Adaptive Trigger Simulation's
+    /// temporary gain-bit flip if one is active mid-buzz (see TrySendMotors's gainOverride
+    /// parameter) - full-buffer-replace output reports mean this write otherwise resets the gain
+    /// bit to whatever the persisted _ledZoneFlags says until the next gate-loop tick corrects
+    /// it.</summary>
     public bool TrySetLedColor(byte red, byte green, byte blue)
     {
         var stream = _activeStream;
@@ -300,7 +320,8 @@ public sealed class HidReader : IDisposable
                 _ledGreen = green;
                 _ledBlue = blue;
                 SendConfigurePacket(stream, _lastConfiguredTriggerLeft < 0 ? 0 : _lastConfiguredTriggerLeft,
-                    _lastConfiguredTriggerRight < 0 ? 0 : _lastConfiguredTriggerRight);
+                    _lastConfiguredTriggerRight < 0 ? 0 : _lastConfiguredTriggerRight,
+                    _lastConfiguredGainOverride);
             }
             return true;
         }
@@ -313,7 +334,12 @@ public sealed class HidReader : IDisposable
     /// <summary>Sets Trigger Gain Mode - a controller-side setting persisted on the Pangu itself
     /// (see QueryTriggerGainMode), not an app-level one, so there's nothing to save to
     /// settings.json here. Sends immediately, reusing whatever trigger level was last configured
-    /// so this doesn't disturb an in-progress trigger buzz - see docs/led.md.</summary>
+    /// so this doesn't disturb an in-progress trigger buzz - see docs/led.md. Also re-sends
+    /// _lastConfiguredGainOverride (see TrySetLedColor's doc comment for why) so this doesn't
+    /// momentarily fight with Adaptive Trigger Simulation's own temporary gain-bit flip if one is
+    /// active at the same instant; the LED color itself (_ledRed/_ledGreen/_ledBlue) is always
+    /// carried forward automatically by SendConfigurePacket regardless of which method calls
+    /// it.</summary>
     public bool TrySetTriggerGainMode(bool enabled)
     {
         var stream = _activeStream;
@@ -327,7 +353,8 @@ public sealed class HidReader : IDisposable
                     ? (byte)(_ledZoneFlags | TriggerGainBit)
                     : (byte)(_ledZoneFlags & ~TriggerGainBit);
                 SendConfigurePacket(stream, _lastConfiguredTriggerLeft < 0 ? 0 : _lastConfiguredTriggerLeft,
-                    _lastConfiguredTriggerRight < 0 ? 0 : _lastConfiguredTriggerRight);
+                    _lastConfiguredTriggerRight < 0 ? 0 : _lastConfiguredTriggerRight,
+                    _lastConfiguredGainOverride);
             }
             TriggerGainMode = enabled;
             TriggerGainModeChanged?.Invoke(enabled);
@@ -342,8 +369,11 @@ public sealed class HidReader : IDisposable
     /// <summary>Builds and sends the 0x62 "configure" report - the device has no concept of a
     /// partial update, so every write carries a full snapshot of both trigger level (from the
     /// caller) and LED state (from the cached _led* fields) at once, regardless of which one
-    /// actually changed. See docs/led.md for the full byte-level decode.</summary>
-    private void SendConfigurePacket(HidStream stream, int triggerLeftLevel, int triggerRightLevel)
+    /// actually changed. See docs/led.md for the full byte-level decode. gainOverride, when
+    /// non-null, flips TriggerGainBit for this write only without touching the persisted
+    /// _ledZoneFlags - see TrySendMotors.</summary>
+    private void SendConfigurePacket(HidStream stream, int triggerLeftLevel, int triggerRightLevel,
+        bool? gainOverride = null)
     {
         var configure = new byte[_activeOutputLength];
         configure[0] = 0x02;
@@ -352,7 +382,8 @@ public sealed class HidReader : IDisposable
         configure[9]  = _ledBlue;
         configure[10] = _ledGreen;
         configure[11] = _ledRed;
-        configure[12] = _ledZoneFlags;
+        configure[12] = gainOverride is null ? _ledZoneFlags
+            : gainOverride.Value ? (byte)(_ledZoneFlags | TriggerGainBit) : (byte)(_ledZoneFlags & ~TriggerGainBit);
         configure[13] = (byte)((triggerLeftLevel << 4) | (_ledBrightness & 0x0F));
         configure[14] = (byte)(triggerRightLevel * 0x10 + 0x04);
         configure[15] = 0x04;
