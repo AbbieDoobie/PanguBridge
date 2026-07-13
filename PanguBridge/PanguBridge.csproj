@@ -29,6 +29,7 @@
   <ItemGroup>
     <None Include="..\portable.txt" Link="portable.txt" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\version.txt" Link="version.txt" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\THIRD-PARTY-NOTICES.md" Link="THIRD-PARTY-NOTICES.md" CopyToOutputDirectory="PreserveNewest" />
     <Resource Include="Icon.ico" />
   </ItemGroup>
 
