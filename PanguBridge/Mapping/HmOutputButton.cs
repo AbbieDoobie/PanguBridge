@@ -32,4 +32,6 @@ public enum HmOutputButton
     RightFnButton,
     TouchpadLeftTouch,
     TouchpadRightTouch,
+    TouchpadLeftClick,
+    TouchpadRightClick,
 }

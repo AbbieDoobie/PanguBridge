@@ -34,6 +34,7 @@ public static class HmMapping
         HmOutputButton.LeftPaddle, HmOutputButton.RightPaddle,
         HmOutputButton.LeftFnButton, HmOutputButton.RightFnButton,
         HmOutputButton.TouchpadClick, HmOutputButton.TouchpadLeftTouch, HmOutputButton.TouchpadRightTouch,
+        HmOutputButton.TouchpadLeftClick, HmOutputButton.TouchpadRightClick,
     };
 
     public static Dictionary<HmSourceButton, HmOutputButton> CreateDefault() => new()
@@ -108,6 +109,8 @@ public static class HmMapping
         HmOutputButton.RightFnButton => "Right FN Button",
         HmOutputButton.TouchpadLeftTouch => "Touchpad Left-Side Touch",
         HmOutputButton.TouchpadRightTouch => "Touchpad Right-Side Touch",
+        HmOutputButton.TouchpadLeftClick => "Touchpad Left-Side Click",
+        HmOutputButton.TouchpadRightClick => "Touchpad Right-Side Click",
         _ => button.ToString(),
     };
 }

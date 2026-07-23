@@ -414,7 +414,12 @@ public sealed class HidMaestroOutput : IDisposable
         //   bit7 (0x80) = PS RB (right back paddle) - inferred as the only remaining bit
         byte b9 = 0;
         if (active[(int)HmOutputButton.Guide])        b9 |= 0x01; // Guide / PS button
-        if (active[(int)HmOutputButton.TouchpadClick]) b9 |= 0x02; // Touchpad physical click
+        // TouchpadLeftClick/TouchpadRightClick are a physical click with the finger positioned
+        // on that half (see ComputeTouch) rather than a separate wire bit - the device only has
+        // one click bit regardless of where on the pad it's pressed.
+        if (active[(int)HmOutputButton.TouchpadClick] ||
+            active[(int)HmOutputButton.TouchpadLeftClick] ||
+            active[(int)HmOutputButton.TouchpadRightClick]) b9 |= 0x02; // Touchpad physical click
         if (active[(int)HmOutputButton.Mute])         b9 |= 0x04; // Mute button
         if (active[(int)HmOutputButton.RightFnButton]) b9 |= 0x20; // PS Function (right Fn)
         if (active[(int)HmOutputButton.RightPaddle])  b9 |= 0x80; // PS RB (right back paddle)
@@ -478,10 +483,13 @@ public sealed class HidMaestroOutput : IDisposable
         r[offset + 3] = (byte)((y >> 4) & 0xFF);
     }
 
-    // LM = left-half touch, RM = right-half touch. FN (touchpad click) with neither held
-    // encodes a dummy center finger so the report reflects realistic hardware state (a
-    // click always has a finger present). Shared by BuildHmState and BuildReport so both
-    // submit calls always agree on touch data for a given tick - see TouchState above.
+    // LM = left-half touch, RM = right-half touch. TouchpadLeftClick/TouchpadRightClick are the
+    // same left/right finger position as the touch-only pair, just also forcing the physical
+    // click bit (see BuildReport's b9) - a click-while-positioned-on-a-side, not a separate touch
+    // location. FN (touchpad click) with no side held encodes a dummy center finger so the
+    // report reflects realistic hardware state (a click always has a finger present). Shared by
+    // BuildHmState and BuildReport so both submit calls always agree on touch data for a given
+    // tick - see TouchState above.
     //
     // Inactive-finger X/Y is TpCenterX/TpCenterY, not (0,0) - HIDMaestro's SubmitState
     // touchpad encoder has an internal bug where Active=false + X=0 + Y=0 can render as a
@@ -490,9 +498,10 @@ public sealed class HidMaestroOutput : IDisposable
     // a correct consumer ignores X/Y whenever the Active bit is clear.
     private TouchState ComputeTouch(bool[] active)
     {
-        bool lm = active[(int)HmOutputButton.TouchpadLeftTouch];
-        bool rm = active[(int)HmOutputButton.TouchpadRightTouch];
-        bool click = active[(int)HmOutputButton.TouchpadClick];
+        bool lm = active[(int)HmOutputButton.TouchpadLeftTouch] || active[(int)HmOutputButton.TouchpadLeftClick];
+        bool rm = active[(int)HmOutputButton.TouchpadRightTouch] || active[(int)HmOutputButton.TouchpadRightClick];
+        bool click = active[(int)HmOutputButton.TouchpadClick] ||
+            active[(int)HmOutputButton.TouchpadLeftClick] || active[(int)HmOutputButton.TouchpadRightClick];
 
         if (lm && rm) return new TouchState(true, TpLeftX,   TpCenterY, true, TpRightX, TpCenterY);
         if (lm)       return new TouchState(true, TpLeftX,   TpCenterY, false, TpCenterX, TpCenterY);
@@ -526,7 +535,9 @@ public sealed class HidMaestroOutput : IDisposable
         if (active[(int)HmOutputButton.LeftThumbClick])  buttons |= HMButton.LeftStick;
         if (active[(int)HmOutputButton.RightThumbClick]) buttons |= HMButton.RightStick;
         if (active[(int)HmOutputButton.Guide])           buttons |= HMButton.Guide;
-        if (active[(int)HmOutputButton.TouchpadClick])   buttons |= HMButton.Touchpad;
+        if (active[(int)HmOutputButton.TouchpadClick] ||
+            active[(int)HmOutputButton.TouchpadLeftClick] ||
+            active[(int)HmOutputButton.TouchpadRightClick]) buttons |= HMButton.Touchpad;
 
         HMHat hat = (active[(int)HmOutputButton.DPadUp], active[(int)HmOutputButton.DPadDown],
                      active[(int)HmOutputButton.DPadLeft], active[(int)HmOutputButton.DPadRight]) switch
